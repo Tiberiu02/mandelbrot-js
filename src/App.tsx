@@ -581,18 +581,27 @@ export default function MandelbrotExplorer() {
             });
             const url = `https://mandelbrot.musat.ai?${params}`;
             const text = `Check out this Mandelbrot view: ${url}`;
-            const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+            const isMobile = /Android|iPhone|iPad|iPod/i.test(
+              navigator.userAgent,
+            );
 
             if (isMobile && navigator.share && canvas) {
-              const maxSize = 1080;
-              const scale2 = Math.min(1, maxSize / Math.max(canvas.width, canvas.height));
+              const maxSize = 720;
+              const scale2 = Math.min(
+                1,
+                maxSize / Math.max(canvas.width, canvas.height),
+              );
               const thumb = document.createElement("canvas");
               thumb.width = Math.round(canvas.width * scale2);
               thumb.height = Math.round(canvas.height * scale2);
-              thumb.getContext("2d")!.drawImage(canvas, 0, 0, thumb.width, thumb.height);
+              thumb
+                .getContext("2d")!
+                .drawImage(canvas, 0, 0, thumb.width, thumb.height);
               thumb.toBlob((blob) => {
                 if (!blob) return;
-                const file = new File([blob], "mandelbrot.png", { type: "image/png" });
+                const file = new File([blob], "mandelbrot.png", {
+                  type: "image/png",
+                });
                 const shareData = { text, files: [file] };
                 if (navigator.canShare?.(shareData)) {
                   navigator.share(shareData);
@@ -601,7 +610,9 @@ export default function MandelbrotExplorer() {
                 }
               }, "image/png");
             } else {
-              navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!"));
+              navigator.clipboard
+                .writeText(url)
+                .then(() => alert("Link copied to clipboard!"));
             }
           }}
           style={{
