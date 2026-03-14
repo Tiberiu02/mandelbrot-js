@@ -2,6 +2,57 @@
 
 import config from "./config";
 
+export const palettes: Record<string, string> = {
+  "gold": `
+    vec3 palette(int iter, float dotZ) {
+        float sn = float(iter) + 1.0 - log2(log2(dotZ) * 0.5);
+        float t = fract(pow(sn, 0.35) * 0.15);
+        vec3 c0 = vec3(0.000, 0.027, 0.392);
+        vec3 c1 = vec3(0.125, 0.420, 0.796);
+        vec3 c2 = vec3(0.929, 1.000, 1.000);
+        vec3 c3 = vec3(1.000, 0.667, 0.000);
+        vec3 c4 = vec3(0.000, 0.008, 0.000);
+        if      (t < 0.1600) return mix(c0, c1, t / 0.1600);
+        else if (t < 0.4200) return mix(c1, c2, (t - 0.1600) / 0.2600);
+        else if (t < 0.6425) return mix(c2, c3, (t - 0.4200) / 0.2225);
+        else if (t < 0.8575) return mix(c3, c4, (t - 0.6425) / 0.2150);
+        else                 return mix(c4, c0, (t - 0.8575) / 0.1425);
+    }
+  `,
+  grayscale: `
+    vec3 palette(int iter, float dotZ) {
+        float sn = float(iter) + 1.0 - log2(log2(dotZ) * 0.5);
+        float t = fract(pow(sn, 0.35) * 0.15);
+        return vec3(t);
+    }
+  `,
+  fire: `
+    vec3 palette(int iter, float dotZ) {
+        float sn = float(iter) + 1.0 - log2(log2(dotZ) * 0.5);
+        float t = fract(pow(sn, 0.35) * 0.15);
+        vec3 c0 = vec3(0.000, 0.000, 0.000);
+        vec3 c1 = vec3(0.502, 0.000, 0.000);
+        vec3 c2 = vec3(1.000, 0.420, 0.000);
+        vec3 c3 = vec3(1.000, 1.000, 0.200);
+        vec3 c4 = vec3(1.000, 1.000, 1.000);
+        if      (t < 0.25) return mix(c0, c1, t / 0.25);
+        else if (t < 0.50) return mix(c1, c2, (t - 0.25) / 0.25);
+        else if (t < 0.75) return mix(c2, c3, (t - 0.50) / 0.25);
+        else               return mix(c3, c4, (t - 0.75) / 0.25);
+    }
+  `,
+  "rainbow": `
+    vec3 palette(int iter, float dotZ) {
+        float sn = float(iter) + 1.0 - log2(log2(dotZ) * 0.5);
+        float t = fract(pow(sn, 0.35) * 0.15);
+        float r = 0.5 + 0.5 * cos(6.28318 * (t + 0.000));
+        float g = 0.5 + 0.5 * cos(6.28318 * (t + 0.333));
+        float b = 0.5 + 0.5 * cos(6.28318 * (t + 0.667));
+        return vec3(r, g, b);
+    }
+  `,
+};
+
 export interface RenderBatchParams {
   fx: number;
   fy: number;
@@ -30,11 +81,13 @@ export class MandelbrotRenderer {
 
   public physicalSize: number;
   public tilesPerRow: number;
+  public palette: string;
 
   private instanceBuffer!: WebGLBuffer;
   private instanceData: Float32Array;
 
-  constructor(physicalSize: number, maxTilesPerFrame: number) {
+  constructor(physicalSize: number, maxTilesPerFrame: number, palette: string) {
+    this.palette = palette;
     this.physicalSize = physicalSize;
     this.tilesPerRow = Math.ceil(Math.sqrt(maxTilesPerFrame));
     const totalSize = this.tilesPerRow * physicalSize;
@@ -126,19 +179,7 @@ export class MandelbrotRenderer {
       
       out vec4 outColor;
 
-      vec3 palette(float t) {
-          t = fract(t);
-          vec3 c0 = vec3(0.000, 0.027, 0.392);
-          vec3 c1 = vec3(0.125, 0.420, 0.796);
-          vec3 c2 = vec3(0.929, 1.000, 1.000);
-          vec3 c3 = vec3(1.000, 0.667, 0.000);
-          vec3 c4 = vec3(0.000, 0.008, 0.000);
-          if      (t < 0.1600) return mix(c0, c1, t / 0.1600);
-          else if (t < 0.4200) return mix(c1, c2, (t - 0.1600) / 0.2600);
-          else if (t < 0.6425) return mix(c2, c3, (t - 0.4200) / 0.2225);
-          else if (t < 0.8575) return mix(c3, c4, (t - 0.6425) / 0.2150);
-          else                 return mix(c4, c0, (t - 0.8575) / 0.1425);
-      }
+      ${this.palette}
 
       vec2 df_add(vec2 a, vec2 b) {
           float one = (u_one + u_other) * 0.5;
@@ -224,9 +265,7 @@ export class MandelbrotRenderer {
         if (iter >= v_maxIterations) {
           outColor = vec4(0.0, 0.0, 0.02, 1.0);
         } else {
-          float sn = float(iter) + 1.0 - log2(log2(dotZ) * 0.5);
-          float t = pow(sn, 0.35) * 0.15;
-          outColor = vec4(palette(t), 1.0);
+          outColor = vec4(palette(iter, dotZ), 1.0);
         }
       }
     `;
@@ -300,6 +339,14 @@ export class MandelbrotRenderer {
     this.loc_magic_a = gl.getUniformLocation(this.program, "u_magicA");
     this.loc_magic_b = gl.getUniformLocation(this.program, "u_magicB");
     this.loc_tilesPerRow = gl.getUniformLocation(this.program, "u_tilesPerRow");
+  }
+
+  public delete() {
+    const { gl } = this;
+    gl.deleteProgram(this.program);
+    gl.deleteVertexArray(this.vao);
+    gl.deleteBuffer(this.instanceBuffer);
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
   }
 
   public renderBatch(tiles: RenderBatchParams[]) {

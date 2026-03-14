@@ -3,12 +3,13 @@ const config = {
 
   mandelbrot: {
     BASE_ITERS: 256,
-    ITERS_PER_LEVEL: 256,
-    MAX_ITERS: 20000,
+    ITERS_PER_LEVEL_INIT: 256,
+    MAX_ITERS: 200000,
+    DEFAULT_PALETTE: "gold",
   },
 
   tile: {
-    TILE_SIZE: 32,
+    TILE_SIZE: 64,
     INITIAL_TILES_PER_FRAME: 16,
     MAX_TILES_PER_FRAME: 256,
   },

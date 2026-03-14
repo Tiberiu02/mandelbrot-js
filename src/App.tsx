@@ -1,13 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState } from "react";
-import { MandelbrotRenderer } from "./rendering";
+import { MandelbrotRenderer, palettes } from "./rendering";
 import config from "./config";
-import {
-  MdDownload,
-  MdShare,
-  MdInfo,
-  MdClose,
-  MdSettings,
-} from "react-icons/md";
+import { MdDownload, MdShare, MdClose, MdSettings } from "react-icons/md";
 import { FaGithub } from "react-icons/fa";
 import { FaUser } from "react-icons/fa6";
 
@@ -36,7 +30,7 @@ function iterationsAtLevel(level: number): number {
     config.mandelbrot.MAX_ITERS,
     Math.floor(
       config.mandelbrot.BASE_ITERS +
-        Math.max(0, level) * config.mandelbrot.ITERS_PER_LEVEL,
+        Math.max(0, level) * config.mandelbrot.ITERS_PER_LEVEL_INIT,
     ),
   );
 }
@@ -55,6 +49,7 @@ export default function MandelbrotExplorer() {
 
   const rendererRef = useRef<MandelbrotRenderer | null>(null);
   const isRenderingRef = useRef<boolean>(false);
+  const isInteractingRef = useRef<boolean>(false);
 
   // --- DYNAMIC FPS SCALING ---
   const tilesPerFrameRef = useRef<number>(config.tile.INITIAL_TILES_PER_FRAME);
@@ -64,6 +59,10 @@ export default function MandelbrotExplorer() {
 
   const [showInstructions, setShowInstructions] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [itersPerLevel, setItersPerLevel] = useState(
+    config.mandelbrot.ITERS_PER_LEVEL_INIT,
+  );
+  const [palette, setPalette] = useState(config.mandelbrot.DEFAULT_PALETTE);
 
   // Hide instructions after 10 seconds
   useEffect(() => {
@@ -166,11 +165,16 @@ export default function MandelbrotExplorer() {
       };
 
       const targetL = Math.floor(Math.log2(scale / config.tile.TILE_SIZE));
-      const currentTilesPerFrame = tilesPerFrameRef.current;
+      const currentTilesPerFrame =
+        isInteractingRef.current || showModal
+          ? tilesPerFrameRef.current > 1
+            ? 1
+            : 0
+          : tilesPerFrameRef.current;
       let isCurrentFrameIntensive = false;
 
       // 1. Render missing tiles using WebGL Instance Batching
-      if (!isRenderingRef.current) {
+      if (!isRenderingRef.current && currentTilesPerFrame > 0) {
         const missing = [];
 
         for (let L = targetL - 4; L <= targetL + 4; L++) {
@@ -209,17 +213,20 @@ export default function MandelbrotExplorer() {
 
           const targets = missing.slice(0, currentTilesPerFrame);
 
-          if (targets.length >= currentTilesPerFrame) {
+          if (targets.length >= tilesPerFrameRef.current) {
             isCurrentFrameIntensive = true;
           }
 
           if (
             !rendererRef.current ||
-            rendererRef.current.physicalSize !== physicalSize
+            rendererRef.current.physicalSize !== physicalSize ||
+            rendererRef.current.palette !== palette
           ) {
+            rendererRef.current?.delete();
             rendererRef.current = new MandelbrotRenderer(
               physicalSize,
               config.tile.MAX_TILES_PER_FRAME,
+              palettes[palette],
             );
           }
 
@@ -307,13 +314,13 @@ export default function MandelbrotExplorer() {
             0.2 * deltaTime + 0.8 * emaDurationRef.current;
           const currentFps = 1000 / emaDurationRef.current;
 
-          if (currentFps < 20) {
+          if (currentFps < 6) {
             tilesPerFrameRef.current = Math.max(
               1,
               Math.floor(tilesPerFrameRef.current / 1.5),
             );
             emaDurationRef.current /= 1.5;
-          } else if (currentFps > 45) {
+          } else if (currentFps > 12) {
             tilesPerFrameRef.current = Math.min(
               config.tile.MAX_TILES_PER_FRAME,
               Math.floor(tilesPerFrameRef.current * 1.5 + 1),
@@ -361,7 +368,8 @@ export default function MandelbrotExplorer() {
           screenX + drawSize < 0 ||
           screenX > canvas.width ||
           screenY + drawSize < 0 ||
-          screenY > canvas.height
+          screenY > canvas.height ||
+          tile.L >= targetL + 2
         ) {
           continue;
         }
@@ -390,7 +398,7 @@ export default function MandelbrotExplorer() {
 
       loopRef.current = requestAnimationFrame(renderFrame);
     },
-    [enforceLimits],
+    [enforceLimits, palette, showModal],
   );
 
   useEffect(() => {
@@ -403,8 +411,16 @@ export default function MandelbrotExplorer() {
     if (isFinite(z) && z > 0) view.current.scale = z;
 
     loopRef.current = requestAnimationFrame(renderFrame);
-    return () => cancelAnimationFrame(loopRef.current);
+    return () => {
+      cancelAnimationFrame(loopRef.current);
+      rendererRef.current?.delete();
+      rendererRef.current = null;
+    };
   }, [renderFrame]);
+
+  const interactionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const onWheel = (e: React.WheelEvent) => {
     const zoomMultiplier = Math.pow(0.99, e.deltaY * 0.1);
@@ -428,10 +444,17 @@ export default function MandelbrotExplorer() {
     view.current.x = fx - mx / view.current.scale;
     view.current.y = fy - my / view.current.scale;
 
+    isInteractingRef.current = true;
+    if (interactionTimeoutRef.current)
+      clearTimeout(interactionTimeoutRef.current);
+    interactionTimeoutRef.current = setTimeout(() => {
+      isInteractingRef.current = false;
+    }, 300);
     enforceLimits(); // Apply constraints after zoom
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
+    isInteractingRef.current = true;
     containerRef.current?.setPointerCapture(e.pointerId);
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
   };
@@ -494,6 +517,7 @@ export default function MandelbrotExplorer() {
 
   const onPointerUpOrCancel = (e: React.PointerEvent) => {
     activePointers.current.delete(e.pointerId);
+    if (activePointers.current.size === 0) isInteractingRef.current = false;
     containerRef.current?.releasePointerCapture(e.pointerId);
   };
 
@@ -523,85 +547,13 @@ export default function MandelbrotExplorer() {
         </div>
       </div>
 
-      <div className="absolute bottom-5 right-5 flex flex-col gap-2.5 z-10">
+      <div className="absolute bottom-5 right-5 z-10">
         <button
           onClick={() => setShowModal(true)}
           className="w-11 h-11 rounded-full border-none bg-black/60 text-white cursor-pointer flex items-center justify-center text-[22px]"
           title="About"
         >
           <MdSettings />
-        </button>
-
-        <button
-          onClick={() => {
-            const canvas = mainCanvasRef.current;
-            const { x, y, scale } = view.current;
-            const decimals = Math.min(15, Math.ceil(Math.log10(scale)));
-            const params = new URLSearchParams({
-              x: x.toFixed(decimals),
-              y: y.toFixed(decimals),
-              z: scale.toExponential(1),
-            });
-            const url = `https://mandelbrot.musat.ai?${params}`;
-            const text = `Check out this Mandelbrot view: ${url}`;
-            const isMobile = /Android|iPhone|iPad|iPod/i.test(
-              navigator.userAgent,
-            );
-
-            if (isMobile && navigator.share && canvas) {
-              const maxSize = 720;
-              const scale2 = Math.min(
-                1,
-                maxSize / Math.max(canvas.width, canvas.height),
-              );
-              const thumb = document.createElement("canvas");
-              thumb.width = Math.round(canvas.width * scale2);
-              thumb.height = Math.round(canvas.height * scale2);
-              thumb
-                .getContext("2d")!
-                .drawImage(canvas, 0, 0, thumb.width, thumb.height);
-              thumb.toBlob((blob) => {
-                if (!blob) return;
-                const file = new File([blob], "mandelbrot.png", {
-                  type: "image/png",
-                });
-                const shareData = { text, files: [file] };
-                if (navigator.canShare?.(shareData)) {
-                  navigator.share(shareData);
-                } else {
-                  navigator.share({ text });
-                }
-              }, "image/png");
-            } else {
-              navigator.clipboard
-                .writeText(url)
-                .then(() => alert("Link copied to clipboard!"));
-            }
-          }}
-          className="w-11 h-11 rounded-full border-none bg-black/60 text-white cursor-pointer flex items-center justify-center text-[22px]"
-          title="Share view"
-        >
-          <MdShare />
-        </button>
-
-        <button
-          onClick={() => {
-            const canvas = mainCanvasRef.current;
-            if (!canvas) return;
-            const { x, y, scale } = view.current;
-            const now = new Date();
-            const date = now.toISOString().slice(0, 10);
-            const time = now.toTimeString().slice(0, 8).replace(/:/g, "-");
-            const decimals = Math.min(15, Math.ceil(Math.log10(scale)));
-            const link = document.createElement("a");
-            link.download = `mandelbrot_${date}_${time}_${x.toFixed(decimals)}_${y.toFixed(decimals)}_${scale.toExponential(1)}.png`;
-            link.href = canvas.toDataURL("image/png");
-            link.click();
-          }}
-          className="w-11 h-11 rounded-full border-none bg-black/60 text-white cursor-pointer flex items-center justify-center text-[22px]"
-          title="Download as PNG"
-        >
-          <MdDownload />
         </button>
       </div>
       {showModal && (
@@ -621,17 +573,67 @@ export default function MandelbrotExplorer() {
             </button>
 
             <div>
-              <h2 className="text-xl font-bold mb-1">Mandelbrot Explorer</h2>
-              <p className="text-white/60 text-sm leading-relaxed">
-                An interactive Mandelbrot set explorer with WebGL2 rendering,
-                deep zoom via emulated double-precision arithmetic, and adaptive
-                performance scaling.
-              </p>
+              <h2 className="text-xl font-bold mb-3">Settings</h2>
+              <div className="flex justify-between items-center">
+                <label className="text-sm text-white/60">
+                  Number of iterations
+                </label>
+                <select
+                  value={itersPerLevel}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setItersPerLevel(val);
+                    config.mandelbrot.ITERS_PER_LEVEL_INIT = val;
+                    tileCache.current.clear();
+                  }}
+                  className="w-32 bg-white/10 text-white text-sm rounded-lg px-3 py-1 border-none cursor-pointer outline-none"
+                >
+                  <option value={64} className="bg-[#222] text-white">
+                    very low
+                  </option>
+                  <option value={128} className="bg-[#222] text-white">
+                    low
+                  </option>
+                  <option value={256} className="bg-[#222] text-white">
+                    medium
+                  </option>
+                  <option value={512} className="bg-[#222] text-white">
+                    high
+                  </option>
+                  <option value={2048} className="bg-[#222] text-white">
+                    very high
+                  </option>
+                  <option value={8192} className="bg-[#222] text-white">
+                    extreme
+                  </option>
+                </select>
+              </div>
+              <div className="flex justify-between items-center mt-3">
+                <label className="text-sm text-white/60">Color palette</label>
+                <select
+                  value={palette}
+                  onChange={(e) => {
+                    setPalette(e.target.value);
+                    tileCache.current.clear();
+                  }}
+                  className="w-32 bg-white/10 text-white text-sm rounded-lg px-3 py-1 border-none cursor-pointer outline-none"
+                >
+                  {Object.keys(palettes).map((name) => (
+                    <option
+                      key={name}
+                      value={name}
+                      className="bg-[#222] text-white"
+                    >
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div>
-              <h2 className="text-xl font-bold mb-2">Current View</h2>
-              <div className="bg-white/5 rounded-xl p-4 font-mono text-xs flex flex-col gap-2">
+              <h2 className="text-xl font-bold mb-3">Current View</h2>
+              <div className="bg-white/5 rounded-xl px-4 py-3 font-mono text-xs flex flex-col gap-2">
                 {(() => {
                   const { x, y, scale } = view.current;
                   const decimals = Math.min(15, Math.ceil(Math.log10(scale)));
@@ -653,24 +655,84 @@ export default function MandelbrotExplorer() {
                   );
                 })()}
               </div>
+              <div className="flex flex-col gap-2 mt-3">
+                <button
+                  onClick={() => {
+                    const canvas = mainCanvasRef.current;
+                    if (!canvas) return;
+                    const { x, y, scale } = view.current;
+                    const now = new Date();
+                    const date = now.toISOString().slice(0, 10);
+                    const time = now
+                      .toTimeString()
+                      .slice(0, 8)
+                      .replace(/:/g, "-");
+                    const decimals = Math.min(15, Math.ceil(Math.log10(scale)));
+                    const link = document.createElement("a");
+                    link.download = `mandelbrot_${date}_${time}_${x.toFixed(decimals)}_${y.toFixed(decimals)}_${scale.toExponential(1)}.png`;
+                    link.href = canvas.toDataURL("image/png");
+                    link.click();
+                  }}
+                  className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm cursor-pointer border-none transition-colors"
+                >
+                  <MdDownload className="text-base mr-1 shrink-0" /> Download
+                  current view as image
+                </button>
+                <button
+                  onClick={() => {
+                    const canvas = mainCanvasRef.current;
+                    const { x, y, scale } = view.current;
+                    const decimals = Math.min(15, Math.ceil(Math.log10(scale)));
+                    const params = new URLSearchParams({
+                      x: x.toFixed(decimals),
+                      y: y.toFixed(decimals),
+                      z: scale.toExponential(1),
+                    });
+                    const url = `https://mandelbrot.musat.ai?${params}`;
+                    const text = `Check out this Mandelbrot view: ${url}`;
+                    const isMobile = /Android|iPhone|iPad|iPod/i.test(
+                      navigator.userAgent,
+                    );
+                    if (isMobile && navigator.share && canvas) {
+                      const maxSize = 720;
+                      const scale2 = Math.min(
+                        1,
+                        maxSize / Math.max(canvas.width, canvas.height),
+                      );
+                      const thumb = document.createElement("canvas");
+                      thumb.width = Math.round(canvas.width * scale2);
+                      thumb.height = Math.round(canvas.height * scale2);
+                      thumb
+                        .getContext("2d")!
+                        .drawImage(canvas, 0, 0, thumb.width, thumb.height);
+                      thumb.toBlob((blob) => {
+                        if (!blob) return;
+                        const file = new File([blob], "mandelbrot.png", {
+                          type: "image/png",
+                        });
+                        const shareData = { text, files: [file] };
+                        if (navigator.canShare?.(shareData)) {
+                          navigator.share(shareData);
+                        } else {
+                          navigator.share({ text });
+                        }
+                      }, "image/png");
+                    } else {
+                      navigator.clipboard
+                        .writeText(url)
+                        .then(() => alert("Link copied to clipboard!"));
+                    }
+                  }}
+                  className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm cursor-pointer border-none transition-colors"
+                >
+                  <MdShare className="text-base mr-1 shrink-0" /> Share current
+                  view via link
+                </button>
+              </div>
             </div>
 
             <div className="flex flex-col gap-3">
-              <h2 className="text-xl font-bold mb-1">About the Project</h2>
-              <a
-                href="https://musat.ai"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 text-sm text-white/80 hover:text-white transition-colors"
-              >
-                <div>
-                  <div className="font-semibold">Tiberiu Musat</div>
-                  <div className="text-white/40 text-xs">musat.ai</div>
-                </div>
-                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-base shrink-0">
-                  <FaUser />
-                </div>
-              </a>
+              <h2 className="text-xl font-bold mb-1">About the project</h2>
 
               <a
                 href="https://github.com/tiberiu02/mandelbrot-js"
@@ -682,10 +744,25 @@ export default function MandelbrotExplorer() {
                   <FaGithub />
                 </div>
                 <div>
-                  <div className="font-semibold">Source code</div>
-                  <div className="text-white/40 text-xs">
+                  <div className="font-semibold">Source Code on GitHub</div>
+                  <div className="text-white/40 text-xs text-ellipsis w-full text-nowrap grow-0">
                     github.com/tiberiu02/mandelbrot-js
                   </div>
+                </div>
+              </a>
+
+              <a
+                href="https://musat.ai"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 text-sm text-white/80 hover:text-white transition-colors"
+              >
+                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-base shrink-0">
+                  <FaUser />
+                </div>
+                <div>
+                  <div className="font-semibold">Created by Tiberiu Musat</div>
+                  <div className="text-white/40 text-xs">https://musat.ai</div>
                 </div>
               </a>
             </div>
