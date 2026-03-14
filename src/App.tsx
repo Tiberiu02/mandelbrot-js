@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState } from "react";
 import { MandelbrotRenderer } from "./rendering";
 import config from "./config";
+import { MdDownload } from "react-icons/md";
 
 interface TileData {
   L: number;
@@ -384,6 +385,14 @@ export default function MandelbrotExplorer() {
   );
 
   useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const x = parseFloat(p.get("x") ?? "");
+    const y = parseFloat(p.get("y") ?? "");
+    const z = parseFloat(p.get("z") ?? "");
+    if (isFinite(x)) view.current.x = x;
+    if (isFinite(y)) view.current.y = y;
+    if (isFinite(z) && z > 0) view.current.scale = z;
+
     loopRef.current = requestAnimationFrame(renderFrame);
     return () => cancelAnimationFrame(loopRef.current);
   }, [renderFrame]);
@@ -480,72 +489,110 @@ export default function MandelbrotExplorer() {
   };
 
   return (
-    <div
-      ref={containerRef}
-      onWheel={onWheel}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUpOrCancel}
-      onPointerCancel={onPointerUpOrCancel}
-      style={{
-        width: "100vw",
-        height: "100vh",
-        overflow: "hidden",
-        position: "relative",
-        backgroundColor: "#000",
-        touchAction: "none",
-        userSelect: "none",
-        WebkitUserSelect: "none",
-        overscrollBehavior: "none",
-        cursor: activePointers.current.size > 0 ? "grabbing" : "grab",
-      }}
-    >
-      <canvas
-        ref={mainCanvasRef}
-        style={{ width: "100%", height: "100%", display: "block" }}
-      />
+    <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
       <div
-        ref={debugTextRef}
+        ref={containerRef}
+        onWheel={onWheel}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUpOrCancel}
+        onPointerCancel={onPointerUpOrCancel}
         style={{
-          position: "absolute",
-          display: config.DEBUG_MODE ? "block" : "none",
-          top: 10,
-          left: 10,
-          color: "white",
-          background: "rgba(0,0,0,0.6)",
-          padding: "10px",
-          borderRadius: "8px",
-          fontFamily: "monospace",
-          pointerEvents: "none",
-          fontSize: "10px",
+          width: "100%",
+          height: "100%",
+          overflow: "hidden",
+          position: "relative",
+          backgroundColor: "#000",
+          touchAction: "none",
+          userSelect: "none",
+          WebkitUserSelect: "none",
+          overscrollBehavior: "none",
+          cursor: activePointers.current.size > 0 ? "grabbing" : "grab",
         }}
       >
-        Initializing Explorer...
+        <canvas
+          ref={mainCanvasRef}
+          style={{ width: "100%", height: "100%", display: "block" }}
+        />
+        <div
+          ref={debugTextRef}
+          style={{
+            position: "absolute",
+            display: config.DEBUG_MODE ? "block" : "none",
+            top: 10,
+            left: 10,
+            color: "white",
+            background: "rgba(0,0,0,0.6)",
+            padding: "10px",
+            borderRadius: "8px",
+            fontFamily: "monospace",
+            pointerEvents: "none",
+            fontSize: "10px",
+          }}
+        >
+          Initializing Explorer...
+        </div>
+
+        <div
+          style={{
+            position: "absolute",
+            top: 20,
+            left: "50%",
+            transform: "translateX(-50%)",
+            opacity: showInstructions ? 1 : 0,
+            color: "white",
+            background: "rgba(0,0,0,0.7)",
+            padding: "12px 20px",
+            borderRadius: "8px",
+            fontFamily: "sans-serif",
+            fontWeight: "bold",
+            letterSpacing: "1px",
+            pointerEvents: "none",
+            fontSize: "14px",
+            transition: "opacity 0.5s ease",
+            whiteSpace: "nowrap",
+            zIndex: 10,
+          }}
+        >
+          DRAG TO MOVE, SCROLL TO ZOOM
+        </div>
       </div>
 
-      <div
+      <button
+        onClick={(e) => {
+          const canvas = mainCanvasRef.current;
+          if (!canvas) return;
+          const { x, y, scale } = view.current;
+          const now = new Date();
+          const date = now.toISOString().slice(0, 10);
+          const time = now.toTimeString().slice(0, 8).replace(/:/g, "-");
+          const decimals = Math.min(15, Math.ceil(Math.log10(scale)));
+          const link = document.createElement("a");
+          link.download = `mandelbrot_${date}_${time}_${x.toFixed(decimals)}_${y.toFixed(decimals)}_${scale.toExponential(1)}.png`;
+          link.href = canvas.toDataURL("image/png");
+          link.click();
+        }}
         style={{
           position: "absolute",
-          top: 20,
-          left: "50%",
-          transform: "translateX(-50%)",
-          opacity: showInstructions ? 1 : 0,
+          bottom: 20,
+          right: 20,
+          width: 44,
+          height: 44,
+          borderRadius: "50%",
+          border: "none",
+          background: "rgba(0,0,0,0.6)",
           color: "white",
-          background: "rgba(0,0,0,0.7)",
-          padding: "12px 20px",
-          borderRadius: "8px",
-          fontFamily: "sans-serif",
-          fontWeight: "bold",
-          letterSpacing: "1px",
-          pointerEvents: "none",
-          fontSize: "14px",
-          transition: "opacity 0.5s ease",
-          whiteSpace: "nowrap",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 22,
           zIndex: 10,
         }}
+        title="Download as PNG"
       >
-        DRAG TO MOVE, SCROLL TO ZOOM
-      </div>
+        <MdDownload />
+      </button>
     </div>
   );
 }
