@@ -1,12 +1,12 @@
 // --- WEBGL RENDERER LOGIC ---
 
-export const MAX_ALLOWED_ITERATIONS = 20000;
+import config from "./config";
 
 export interface RenderBatchParams {
   fx: number;
   fy: number;
   size: number;
-  maxIterations: number;
+  iters: number;
   useDouble: boolean;
 }
 
@@ -181,7 +181,7 @@ export class MandelbrotRenderer {
             vec2 zx = vec2(0.0);
             vec2 zy = vec2(0.0);
             
-            for(int i = 0; i < ${MAX_ALLOWED_ITERATIONS}; i++) {
+            for(int i = 0; i < ${config.mandelbrot.MAX_ITERS}; i++) {
                 if (i >= v_maxIterations) break;
                 
                 vec2 x2 = df_mul(zx, zx);
@@ -204,7 +204,7 @@ export class MandelbrotRenderer {
             float cx_f = cx.x;
             float cy_f = cy.x;
             
-            for(int i = 0; i < ${MAX_ALLOWED_ITERATIONS}; i++) {
+            for(int i = 0; i < ${config.mandelbrot.MAX_ITERS}; i++) {
                 if (i >= v_maxIterations) break;
                 
                 float x2 = zx * zx;
@@ -323,7 +323,7 @@ export class MandelbrotRenderer {
       this.instanceData[offset + 3] = fyL;
       this.instanceData[offset + 4] = sizeH;
       this.instanceData[offset + 5] = sizeL;
-      this.instanceData[offset + 6] = t.maxIterations;
+      this.instanceData[offset + 6] = t.iters;
       this.instanceData[offset + 7] = t.useDouble ? 1 : 0;
     }
 

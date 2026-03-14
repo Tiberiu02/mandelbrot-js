@@ -1,23 +1,6 @@
 import React, { useEffect, useRef, useCallback, useState } from "react";
-import {
-  MandelbrotRenderer,
-  MAX_ALLOWED_ITERATIONS,
-  type RenderBatchParams,
-} from "./rendering";
-
-const DEBUG_MODE = false;
-
-const TILE_SIZE = 32;
-const INITIAL_TILES_PER_FRAME = 16;
-const MAX_TILES_PER_FRAME = 256;
-
-// --- LIMITS ---
-const MIN_SCALE = 80; // Prevent zooming too far out
-const MAX_SCALE = 1e14; // Prevent zooming past emulated double limits
-const BOUNDS_MIN_X = -10.0; // Leftmost world coordinate
-const BOUNDS_MAX_X = 10.0; // Rightmost world coordinate
-const BOUNDS_MIN_Y = -10.0; // Topmost world coordinate
-const BOUNDS_MAX_Y = 10.0; // Bottommost world coordinate
+import { MandelbrotRenderer } from "./rendering";
+import config from "./config";
 
 interface TileData {
   L: number;
@@ -39,6 +22,16 @@ interface Point {
   y: number;
 }
 
+function iterationsAtLevel(level: number): number {
+  return Math.min(
+    config.mandelbrot.MAX_ITERS,
+    Math.floor(
+      config.mandelbrot.BASE_ITERS +
+        Math.max(0, level) * config.mandelbrot.ITERS_PER_LEVEL,
+    ),
+  );
+}
+
 // --- REACT COMPONENT ---
 
 export default function MandelbrotExplorer() {
@@ -55,7 +48,7 @@ export default function MandelbrotExplorer() {
   const isRenderingRef = useRef<boolean>(false);
 
   // --- DYNAMIC FPS SCALING ---
-  const tilesPerFrameRef = useRef<number>(INITIAL_TILES_PER_FRAME);
+  const tilesPerFrameRef = useRef<number>(config.tile.INITIAL_TILES_PER_FRAME);
   const lastFrameTimeRef = useRef<number>(0);
   const wasLastIntensiveRef = useRef<boolean>(false);
   const emaDurationRef = useRef<number>(1000 / 60);
@@ -76,6 +69,15 @@ export default function MandelbrotExplorer() {
     const { width, height } = containerRef.current.getBoundingClientRect();
 
     // 1. Clamp Scale (Zoom Limits)
+    const {
+      MIN_SCALE,
+      MAX_SCALE,
+      BOUNDS_MIN_X,
+      BOUNDS_MAX_X,
+      BOUNDS_MIN_Y,
+      BOUNDS_MAX_Y,
+    } = config.limits;
+
     view.current.scale = Math.max(
       MIN_SCALE,
       Math.min(MAX_SCALE, view.current.scale),
@@ -129,7 +131,7 @@ export default function MandelbrotExplorer() {
 
       const { width, height } = containerRef.current.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
-      const physicalSize = Math.floor(TILE_SIZE * dpr);
+      const physicalSize = Math.floor(config.tile.TILE_SIZE * dpr);
 
       let screenWasResized = false;
       if (
@@ -153,7 +155,7 @@ export default function MandelbrotExplorer() {
         bottom: vy + height / 2 / scale,
       };
 
-      const targetL = Math.floor(Math.log2(scale / TILE_SIZE));
+      const targetL = Math.floor(Math.log2(scale / config.tile.TILE_SIZE));
       const currentTilesPerFrame = tilesPerFrameRef.current;
       let isCurrentFrameIntensive = false;
 
@@ -207,23 +209,20 @@ export default function MandelbrotExplorer() {
           ) {
             rendererRef.current = new MandelbrotRenderer(
               physicalSize,
-              MAX_TILES_PER_FRAME,
+              config.tile.MAX_TILES_PER_FRAME,
             );
           }
 
           // --- Execute Batched Draw Call ---
-          const batchParams: RenderBatchParams[] = targets.map((target) => ({
-            fx: target.x * target.fSize,
-            fy: target.y * target.fSize,
-            size: target.fSize,
-            maxIterations: Math.min(
-              MAX_ALLOWED_ITERATIONS,
-              Math.floor(256 + Math.max(0, target.L) * 256),
-            ),
-            useDouble: scale > 1e7,
-          }));
-
-          rendererRef.current.renderBatch(batchParams);
+          rendererRef.current.renderBatch(
+            targets.map((target) => ({
+              fx: target.x * target.fSize,
+              fy: target.y * target.fSize,
+              size: target.fSize,
+              iters: iterationsAtLevel(target.L),
+              useDouble: scale > 1e7,
+            })),
+          );
 
           // --- Distribute Rendered Data to Tiles ---
           for (let i = 0; i < targets.length; i++) {
@@ -306,7 +305,7 @@ export default function MandelbrotExplorer() {
             emaDurationRef.current /= 1.5;
           } else if (currentFps > 45) {
             tilesPerFrameRef.current = Math.min(
-              MAX_TILES_PER_FRAME,
+              config.tile.MAX_TILES_PER_FRAME,
               Math.floor(tilesPerFrameRef.current * 1.5 + 1),
             );
             emaDurationRef.current *= 1.5;
@@ -369,10 +368,7 @@ export default function MandelbrotExplorer() {
       }
 
       if (debugTextRef.current) {
-        const currentIters = Math.min(
-          MAX_ALLOWED_ITERATIONS,
-          Math.floor(256 + Math.max(0, targetL) * 256),
-        );
+        const currentIters = iterationsAtLevel(targetL);
         const mode = scale > 1e7 ? "DOUBLE" : "FLOAT";
         const displayFps = Math.round(1000 / emaDurationRef.current);
 
@@ -396,8 +392,8 @@ export default function MandelbrotExplorer() {
     const zoomMultiplier = Math.pow(0.99, e.deltaY * 0.1);
 
     if (
-      (zoomMultiplier > 1 && view.current.scale == MAX_SCALE) ||
-      (zoomMultiplier < 1 && view.current.scale == MIN_SCALE)
+      (zoomMultiplier > 1 && view.current.scale == config.limits.MAX_SCALE) ||
+      (zoomMultiplier < 1 && view.current.scale == config.limits.MIN_SCALE)
     ) {
       return;
     }
@@ -512,7 +508,7 @@ export default function MandelbrotExplorer() {
         ref={debugTextRef}
         style={{
           position: "absolute",
-          display: DEBUG_MODE ? "block" : "none",
+          display: config.DEBUG_MODE ? "block" : "none",
           top: 10,
           left: 10,
           color: "white",
