@@ -1,5 +1,5 @@
 const config = {
-  DEBUG_MODE: true,
+  DEBUG_MODE: false,
 
   mandelbrot: {
     BASE_ITERS: 256,
