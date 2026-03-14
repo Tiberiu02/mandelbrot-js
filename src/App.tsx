@@ -507,7 +507,7 @@ export default function MandelbrotExplorer() {
       if (!isRenderingRef.current) {
         const missing = [];
 
-        for (let L = targetL - 4; L <= targetL + 3; L++) {
+        for (let L = targetL - 4; L <= targetL + 4; L++) {
           if (missing.length >= currentTilesPerFrame) {
             break;
           }
@@ -677,7 +677,6 @@ export default function MandelbrotExplorer() {
 
       // 3. Paint Frame
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.imageSmoothingEnabled = false;
 
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
@@ -703,6 +702,8 @@ export default function MandelbrotExplorer() {
         ) {
           continue;
         }
+
+        ctx.imageSmoothingEnabled = tile.L <= targetL ? false : true;
 
         ctx.drawImage(
           tile.canvas,
