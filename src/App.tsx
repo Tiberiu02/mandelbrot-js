@@ -1,7 +1,15 @@
 import React, { useEffect, useRef, useCallback, useState } from "react";
 import { MandelbrotRenderer } from "./rendering";
 import config from "./config";
-import { MdDownload, MdShare } from "react-icons/md";
+import {
+  MdDownload,
+  MdShare,
+  MdInfo,
+  MdClose,
+  MdSettings,
+} from "react-icons/md";
+import { FaGithub } from "react-icons/fa";
+import { FaUser } from "react-icons/fa6";
 
 interface TileData {
   L: number;
@@ -55,6 +63,7 @@ export default function MandelbrotExplorer() {
   const emaDurationRef = useRef<number>(1000 / 60);
 
   const [showInstructions, setShowInstructions] = useState(true);
+  const [showModal, setShowModal] = useState(false);
 
   // Hide instructions after 10 seconds
   useEffect(() => {
@@ -489,7 +498,7 @@ export default function MandelbrotExplorer() {
   };
 
   return (
-    <div style={{ width: "100dvw", height: "100dvh", position: "relative" }}>
+    <div className="w-dvw h-dvh relative">
       <div
         ref={containerRef}
         onWheel={onWheel}
@@ -497,78 +506,32 @@ export default function MandelbrotExplorer() {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUpOrCancel}
         onPointerCancel={onPointerUpOrCancel}
-        style={{
-          width: "100%",
-          height: "100%",
-          overflow: "hidden",
-          position: "relative",
-          backgroundColor: "#000",
-          touchAction: "none",
-          userSelect: "none",
-          WebkitUserSelect: "none",
-          overscrollBehavior: "none",
-          cursor: activePointers.current.size > 0 ? "grabbing" : "grab",
-        }}
+        className={`w-full h-full overflow-hidden relative bg-black touch-none select-none overscroll-none ${activePointers.current.size > 0 ? "cursor-grabbing" : "cursor-grab"}`}
       >
-        <canvas
-          ref={mainCanvasRef}
-          style={{ width: "100%", height: "100%", display: "block" }}
-        />
+        <canvas ref={mainCanvasRef} className="w-full h-full block" />
         <div
           ref={debugTextRef}
-          style={{
-            position: "absolute",
-            display: config.DEBUG_MODE ? "block" : "none",
-            top: 10,
-            left: 10,
-            color: "white",
-            background: "rgba(0,0,0,0.6)",
-            padding: "10px",
-            borderRadius: "8px",
-            fontFamily: "monospace",
-            pointerEvents: "none",
-            fontSize: "10px",
-          }}
+          className={`absolute top-2.5 left-2.5 text-white bg-black/60 p-2.5 rounded-lg font-mono pointer-events-none text-[10px] ${config.DEBUG_MODE ? "block" : "hidden"}`}
         >
           Initializing Explorer...
         </div>
 
         <div
-          style={{
-            position: "absolute",
-            top: 20,
-            left: "50%",
-            transform: "translateX(-50%)",
-            opacity: showInstructions ? 1 : 0,
-            color: "white",
-            background: "rgba(0,0,0,0.7)",
-            padding: "12px 20px",
-            borderRadius: "8px",
-            fontFamily: "sans-serif",
-            fontWeight: "bold",
-            letterSpacing: "1px",
-            pointerEvents: "none",
-            fontSize: "14px",
-            transition: "opacity 0.5s ease",
-            whiteSpace: "nowrap",
-            zIndex: 10,
-          }}
+          className={`absolute top-5 left-1/2 -translate-x-1/2 text-white bg-black/70 px-5 py-3 rounded-lg font-sans font-bold tracking-[1px] pointer-events-none text-sm transition-opacity duration-500 whitespace-nowrap z-10 ${showInstructions ? "opacity-100" : "opacity-0"}`}
         >
           DRAG TO MOVE, SCROLL TO ZOOM
         </div>
       </div>
 
-      <div
-        style={{
-          position: "absolute",
-          bottom: 20,
-          right: 20,
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-          zIndex: 10,
-        }}
-      >
+      <div className="absolute bottom-5 right-5 flex flex-col gap-2.5 z-10">
+        <button
+          onClick={() => setShowModal(true)}
+          className="w-11 h-11 rounded-full border-none bg-black/60 text-white cursor-pointer flex items-center justify-center text-[22px]"
+          title="About"
+        >
+          <MdSettings />
+        </button>
+
         <button
           onClick={() => {
             const canvas = mainCanvasRef.current;
@@ -615,19 +578,7 @@ export default function MandelbrotExplorer() {
                 .then(() => alert("Link copied to clipboard!"));
             }
           }}
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: "50%",
-            border: "none",
-            background: "rgba(0,0,0,0.6)",
-            color: "white",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 22,
-          }}
+          className="w-11 h-11 rounded-full border-none bg-black/60 text-white cursor-pointer flex items-center justify-center text-[22px]"
           title="Share view"
         >
           <MdShare />
@@ -647,24 +598,100 @@ export default function MandelbrotExplorer() {
             link.href = canvas.toDataURL("image/png");
             link.click();
           }}
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: "50%",
-            border: "none",
-            background: "rgba(0,0,0,0.6)",
-            color: "white",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 22,
-          }}
+          className="w-11 h-11 rounded-full border-none bg-black/60 text-white cursor-pointer flex items-center justify-center text-[22px]"
           title="Download as PNG"
         >
           <MdDownload />
         </button>
       </div>
+      {showModal && (
+        <div
+          className="absolute inset-0 bg-black/70 flex items-center justify-center z-20"
+          onClick={() => setShowModal(false)}
+        >
+          <div
+            className="bg-[#111] text-white rounded-2xl p-8 max-w-sm w-[90%] flex flex-col gap-5 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowModal(false)}
+              className="absolute top-4 right-4 text-white/50 hover:text-white cursor-pointer text-[22px] bg-transparent border-none"
+            >
+              <MdClose />
+            </button>
+
+            <div>
+              <h2 className="text-xl font-bold mb-1">Mandelbrot Explorer</h2>
+              <p className="text-white/60 text-sm leading-relaxed">
+                An interactive Mandelbrot set explorer with WebGL2 rendering,
+                deep zoom via emulated double-precision arithmetic, and adaptive
+                performance scaling.
+              </p>
+            </div>
+
+            <div>
+              <h2 className="text-xl font-bold mb-2">Current View</h2>
+              <div className="bg-white/5 rounded-xl p-4 font-mono text-xs flex flex-col gap-2">
+                {(() => {
+                  const { x, y, scale } = view.current;
+                  const decimals = Math.min(15, Math.ceil(Math.log10(scale)));
+                  return (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-white/40">X</span>
+                        <span>{x.toFixed(decimals)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-white/40">Y</span>
+                        <span>{y.toFixed(decimals)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-white/40">Zoom</span>
+                        <span>{scale.toExponential(2)}</span>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <h2 className="text-xl font-bold mb-1">About the Project</h2>
+              <a
+                href="https://musat.ai"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 text-sm text-white/80 hover:text-white transition-colors"
+              >
+                <div>
+                  <div className="font-semibold">Tiberiu Musat</div>
+                  <div className="text-white/40 text-xs">musat.ai</div>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-base shrink-0">
+                  <FaUser />
+                </div>
+              </a>
+
+              <a
+                href="https://github.com/tiberiu02/mandelbrot-js"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 text-sm text-white/80 hover:text-white transition-colors"
+              >
+                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xl shrink-0">
+                  <FaGithub />
+                </div>
+                <div>
+                  <div className="font-semibold">Source code</div>
+                  <div className="text-white/40 text-xs">
+                    github.com/tiberiu02/mandelbrot-js
+                  </div>
+                </div>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
