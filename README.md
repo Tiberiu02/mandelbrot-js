@@ -4,8 +4,6 @@ An interactive Mandelbrot set explorer built with WebGL2 and React. Supports dee
 
 **[Try it live →](https://mandelbrot.musat.ai)**
 
----
-
 ## Screenshots
 
 <table>
@@ -19,11 +17,9 @@ An interactive Mandelbrot set explorer built with WebGL2 and React. Supports dee
   </tr>
   <tr>
     <td><img src="public/screenshots/5.png" width="400"/></td>
-    <td></td>
+    <td><img src="public/screenshots/6.png" width="400"/></td>
   </tr>
 </table>
-
----
 
 ## Technical Overview
 
