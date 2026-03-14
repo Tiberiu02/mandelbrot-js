@@ -581,12 +581,9 @@ export default function MandelbrotExplorer() {
             });
             const url = `https://mandelbrot.musat.ai?${params}`;
             const text = `Check out this Mandelbrot view: ${url}`;
-            const copyFallback = () =>
-              navigator.clipboard
-                .writeText(url)
-                .then(() => alert("Link copied to clipboard!"));
+            const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-            if (navigator.share && canvas) {
+            if (isMobile && navigator.share && canvas) {
               const maxSize = 1080;
               const scale2 = Math.min(1, maxSize / Math.max(canvas.width, canvas.height));
               const thumb = document.createElement("canvas");
@@ -594,22 +591,17 @@ export default function MandelbrotExplorer() {
               thumb.height = Math.round(canvas.height * scale2);
               thumb.getContext("2d")!.drawImage(canvas, 0, 0, thumb.width, thumb.height);
               thumb.toBlob((blob) => {
-                if (!blob) {
-                  copyFallback();
-                  return;
-                }
-                const file = new File([blob], "mandelbrot.png", {
-                  type: "image/png",
-                });
+                if (!blob) return;
+                const file = new File([blob], "mandelbrot.png", { type: "image/png" });
                 const shareData = { text, files: [file] };
                 if (navigator.canShare?.(shareData)) {
-                  navigator.share(shareData).catch(copyFallback);
+                  navigator.share(shareData);
                 } else {
-                  navigator.share({ text }).catch(copyFallback);
+                  navigator.share({ text });
                 }
               }, "image/png");
             } else {
-              copyFallback();
+              navigator.clipboard.writeText(url).then(() => alert("Link copied to clipboard!"));
             }
           }}
           style={{
