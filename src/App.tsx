@@ -587,7 +587,13 @@ export default function MandelbrotExplorer() {
                 .then(() => alert("Link copied to clipboard!"));
 
             if (navigator.share && canvas) {
-              canvas.toBlob((blob) => {
+              const maxSize = 1080;
+              const scale2 = Math.min(1, maxSize / Math.max(canvas.width, canvas.height));
+              const thumb = document.createElement("canvas");
+              thumb.width = Math.round(canvas.width * scale2);
+              thumb.height = Math.round(canvas.height * scale2);
+              thumb.getContext("2d")!.drawImage(canvas, 0, 0, thumb.width, thumb.height);
+              thumb.toBlob((blob) => {
                 if (!blob) {
                   copyFallback();
                   return;
