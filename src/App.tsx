@@ -157,7 +157,14 @@ export default function MandelbrotExplorer() {
 
       const { x: vx, y: vy, scale } = view.current;
 
-      const worldBounds = {
+      const worldBoundsLow = {
+        left: vx - width / scale,
+        right: vx + width / scale,
+        top: vy - height / scale,
+        bottom: vy + height / scale,
+      };
+
+      const worldBoundsHigh = {
         left: vx - width / 2 / scale,
         right: vx + width / 2 / scale,
         top: vy - height / 2 / scale,
@@ -167,10 +174,11 @@ export default function MandelbrotExplorer() {
       const targetL = Math.floor(Math.log2(scale / config.tile.TILE_SIZE));
       const currentTilesPerFrame =
         isInteractingRef.current || showModal
-          ? tilesPerFrameRef.current > 1
-            ? 1
-            : 0
-          : tilesPerFrameRef.current;
+          ? 0
+          : // tilesPerFrameRef.current > 1
+            //   ? 1
+            //   : 0
+            tilesPerFrameRef.current;
       let isCurrentFrameIntensive = false;
 
       // 1. Render missing tiles using WebGL Instance Batching
@@ -183,6 +191,7 @@ export default function MandelbrotExplorer() {
           }
 
           const fSize = Math.pow(2, -L);
+          const worldBounds = L <= targetL ? worldBoundsLow : worldBoundsHigh;
           const minX = Math.floor(worldBounds.left / fSize);
           const maxX = Math.floor(worldBounds.right / fSize);
           const minY = Math.floor(worldBounds.top / fSize);
@@ -455,6 +464,8 @@ export default function MandelbrotExplorer() {
 
   const onPointerDown = (e: React.PointerEvent) => {
     isInteractingRef.current = true;
+    if (interactionTimeoutRef.current)
+      clearTimeout(interactionTimeoutRef.current);
     containerRef.current?.setPointerCapture(e.pointerId);
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
   };
@@ -517,7 +528,13 @@ export default function MandelbrotExplorer() {
 
   const onPointerUpOrCancel = (e: React.PointerEvent) => {
     activePointers.current.delete(e.pointerId);
-    if (activePointers.current.size === 0) isInteractingRef.current = false;
+    if (activePointers.current.size === 0) {
+      if (interactionTimeoutRef.current)
+        clearTimeout(interactionTimeoutRef.current);
+      interactionTimeoutRef.current = setTimeout(() => {
+        isInteractingRef.current = false;
+      }, 300);
+    }
     containerRef.current?.releasePointerCapture(e.pointerId);
   };
 
