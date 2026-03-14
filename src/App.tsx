@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState } from "react";
 import { MandelbrotRenderer } from "./rendering";
 import config from "./config";
-import { MdDownload } from "react-icons/md";
+import { MdDownload, MdShare } from "react-icons/md";
 
 interface TileData {
   L: number;
@@ -489,7 +489,7 @@ export default function MandelbrotExplorer() {
   };
 
   return (
-    <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
+    <div style={{ width: "100dvw", height: "100dvh", position: "relative" }}>
       <div
         ref={containerRef}
         onWheel={onWheel}
@@ -558,41 +558,104 @@ export default function MandelbrotExplorer() {
         </div>
       </div>
 
-      <button
-        onClick={(e) => {
-          const canvas = mainCanvasRef.current;
-          if (!canvas) return;
-          const { x, y, scale } = view.current;
-          const now = new Date();
-          const date = now.toISOString().slice(0, 10);
-          const time = now.toTimeString().slice(0, 8).replace(/:/g, "-");
-          const decimals = Math.min(15, Math.ceil(Math.log10(scale)));
-          const link = document.createElement("a");
-          link.download = `mandelbrot_${date}_${time}_${x.toFixed(decimals)}_${y.toFixed(decimals)}_${scale.toExponential(1)}.png`;
-          link.href = canvas.toDataURL("image/png");
-          link.click();
-        }}
+      <div
         style={{
           position: "absolute",
           bottom: 20,
           right: 20,
-          width: 44,
-          height: 44,
-          borderRadius: "50%",
-          border: "none",
-          background: "rgba(0,0,0,0.6)",
-          color: "white",
-          cursor: "pointer",
           display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 22,
+          flexDirection: "column",
+          gap: 10,
           zIndex: 10,
         }}
-        title="Download as PNG"
       >
-        <MdDownload />
-      </button>
+        <button
+          onClick={() => {
+            const canvas = mainCanvasRef.current;
+            const { x, y, scale } = view.current;
+            const decimals = Math.min(15, Math.ceil(Math.log10(scale)));
+            const params = new URLSearchParams({
+              x: x.toFixed(decimals),
+              y: y.toFixed(decimals),
+              z: scale.toExponential(1),
+            });
+            const url = `https://mandelbrot.musat.ai?${params}`;
+            const text = `Check out this Mandelbrot view: ${url}`;
+            const copyFallback = () =>
+              navigator.clipboard
+                .writeText(url)
+                .then(() => alert("Link copied to clipboard!"));
+
+            if (navigator.share && canvas) {
+              canvas.toBlob((blob) => {
+                if (!blob) {
+                  copyFallback();
+                  return;
+                }
+                const file = new File([blob], "mandelbrot.png", {
+                  type: "image/png",
+                });
+                const shareData = { text, files: [file] };
+                if (navigator.canShare?.(shareData)) {
+                  navigator.share(shareData).catch(copyFallback);
+                } else {
+                  navigator.share({ text }).catch(copyFallback);
+                }
+              }, "image/png");
+            } else {
+              copyFallback();
+            }
+          }}
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: "50%",
+            border: "none",
+            background: "rgba(0,0,0,0.6)",
+            color: "white",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 22,
+          }}
+          title="Share view"
+        >
+          <MdShare />
+        </button>
+
+        <button
+          onClick={() => {
+            const canvas = mainCanvasRef.current;
+            if (!canvas) return;
+            const { x, y, scale } = view.current;
+            const now = new Date();
+            const date = now.toISOString().slice(0, 10);
+            const time = now.toTimeString().slice(0, 8).replace(/:/g, "-");
+            const decimals = Math.min(15, Math.ceil(Math.log10(scale)));
+            const link = document.createElement("a");
+            link.download = `mandelbrot_${date}_${time}_${x.toFixed(decimals)}_${y.toFixed(decimals)}_${scale.toExponential(1)}.png`;
+            link.href = canvas.toDataURL("image/png");
+            link.click();
+          }}
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: "50%",
+            border: "none",
+            background: "rgba(0,0,0,0.6)",
+            color: "white",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 22,
+          }}
+          title="Download as PNG"
+        >
+          <MdDownload />
+        </button>
+      </div>
     </div>
   );
 }
