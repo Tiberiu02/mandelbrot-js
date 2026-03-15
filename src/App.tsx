@@ -25,6 +25,10 @@ interface Point {
   y: number;
 }
 
+function isMobile(): boolean {
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 function iterationsAtLevel(level: number): number {
   return Math.min(
     config.mandelbrot.MAX_ITERS,
@@ -754,10 +758,7 @@ export default function MandelbrotExplorer() {
                     });
                     const url = `https://mandelbrot.musat.ai?${params}`;
                     const text = `Check out this Mandelbrot view: ${url}`;
-                    const isMobile = /Android|iPhone|iPad|iPod/i.test(
-                      navigator.userAgent,
-                    );
-                    if (isMobile && navigator.share && canvas) {
+                    if (isMobile() && navigator.share && canvas) {
                       const maxSize = 720;
                       const scale2 = Math.min(
                         1,
@@ -791,9 +792,7 @@ export default function MandelbrotExplorer() {
                 >
                   <MdShare className="text-base mr-1 shrink-0" /> Share current
                   view via link
-                  {/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-                    ? " and image"
-                    : ""}
+                  {isMobile() ? " and image" : ""}
                 </button>
               </div>
             </div>
