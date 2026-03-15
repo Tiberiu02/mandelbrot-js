@@ -208,10 +208,10 @@ export default function MandelbrotExplorer() {
           }
 
           const fSize = Math.pow(2, -L);
-          const minX = Math.floor(worldBounds.left / fSize) - 1;
-          const maxX = Math.floor(worldBounds.right / fSize) + 1;
-          const minY = Math.floor(worldBounds.top / fSize) - 1;
-          const maxY = Math.floor(worldBounds.bottom / fSize) + 1;
+          const minX = Math.floor(worldBounds.left / fSize);
+          const maxX = Math.floor(worldBounds.right / fSize);
+          const minY = Math.floor(worldBounds.top / fSize);
+          const maxY = Math.floor(worldBounds.bottom / fSize);
 
           for (let tx = minX; tx <= maxX; tx++) {
             for (let ty = minY; ty <= maxY; ty++) {
@@ -715,7 +715,6 @@ export default function MandelbrotExplorer() {
                       y: y.toFixed(decimals),
                       z: scale.toExponential(1),
                       p: palette,
-                      i: String(itersPerLevel),
                     });
                     const url = `https://mandelbrot.musat.ai?${params}`;
                     const text = `Check out this Mandelbrot view: ${url}`;
