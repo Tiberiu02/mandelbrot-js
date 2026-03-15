@@ -35,6 +35,17 @@ function iterationsAtLevel(level: number): number {
   );
 }
 
+// --- URL PARAMS (parsed once at module load) ---
+
+const _p = new URLSearchParams(window.location.search);
+const _urlParams = {
+  x: parseFloat(_p.get("x") ?? ""),
+  y: parseFloat(_p.get("y") ?? ""),
+  z: parseFloat(_p.get("z") ?? ""),
+  pal: _p.get("p") ?? "",
+  iters: parseInt(_p.get("i") ?? ""),
+};
+
 // --- REACT COMPONENT ---
 
 export default function MandelbrotExplorer() {
@@ -43,7 +54,11 @@ export default function MandelbrotExplorer() {
   const debugTextRef = useRef<HTMLDivElement>(null);
 
   const tileCache = useRef<Map<string, TileData>>(new Map());
-  const view = useRef<ViewState>({ x: -0.5, y: 0, scale: 100 });
+  const view = useRef<ViewState>({
+    x: isFinite(_urlParams.x) ? _urlParams.x : -0.5,
+    y: isFinite(_urlParams.y) ? _urlParams.y : 0,
+    scale: isFinite(_urlParams.z) && _urlParams.z > 0 ? _urlParams.z : 100,
+  });
   const activePointers = useRef<Map<number, Point>>(new Map());
   const loopRef = useRef<number>(0);
 
@@ -59,10 +74,19 @@ export default function MandelbrotExplorer() {
 
   const [showInstructions, setShowInstructions] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [itersPerLevel, setItersPerLevel] = useState(
-    config.mandelbrot.ITERS_PER_LEVEL_INIT,
+  const [itersPerLevel, setItersPerLevel] = useState(() => {
+    const val = _urlParams.iters;
+    if (isFinite(val) && val > 0) {
+      config.mandelbrot.ITERS_PER_LEVEL_INIT = val;
+      return val;
+    }
+    return config.mandelbrot.ITERS_PER_LEVEL_INIT;
+  });
+  const [palette, setPalette] = useState(() =>
+    _urlParams.pal && _urlParams.pal in palettes
+      ? _urlParams.pal
+      : config.mandelbrot.DEFAULT_PALETTE,
   );
-  const [palette, setPalette] = useState(config.mandelbrot.DEFAULT_PALETTE);
 
   // Hide instructions after 10 seconds
   useEffect(() => {
@@ -157,14 +181,7 @@ export default function MandelbrotExplorer() {
 
       const { x: vx, y: vy, scale } = view.current;
 
-      const worldBoundsLow = {
-        left: vx - width / scale,
-        right: vx + width / scale,
-        top: vy - height / scale,
-        bottom: vy + height / scale,
-      };
-
-      const worldBoundsHigh = {
+      const worldBounds = {
         left: vx - width / 2 / scale,
         right: vx + width / 2 / scale,
         top: vy - height / 2 / scale,
@@ -185,17 +202,16 @@ export default function MandelbrotExplorer() {
       if (!isRenderingRef.current && currentTilesPerFrame > 0) {
         const missing = [];
 
-        for (let L = targetL - 4; L <= targetL + 4; L++) {
+        for (let L = Math.min(-3, targetL - 4); L <= targetL + 4; L++) {
           if (missing.length >= currentTilesPerFrame) {
             break;
           }
 
           const fSize = Math.pow(2, -L);
-          const worldBounds = L <= targetL ? worldBoundsLow : worldBoundsHigh;
-          const minX = Math.floor(worldBounds.left / fSize);
-          const maxX = Math.floor(worldBounds.right / fSize);
-          const minY = Math.floor(worldBounds.top / fSize);
-          const maxY = Math.floor(worldBounds.bottom / fSize);
+          const minX = Math.floor(worldBounds.left / fSize) - 1;
+          const maxX = Math.floor(worldBounds.right / fSize) + 1;
+          const minY = Math.floor(worldBounds.top / fSize) - 1;
+          const maxY = Math.floor(worldBounds.bottom / fSize) + 1;
 
           for (let tx = minX; tx <= maxX; tx++) {
             for (let ty = minY; ty <= maxY; ty++) {
@@ -411,14 +427,6 @@ export default function MandelbrotExplorer() {
   );
 
   useEffect(() => {
-    const p = new URLSearchParams(window.location.search);
-    const x = parseFloat(p.get("x") ?? "");
-    const y = parseFloat(p.get("y") ?? "");
-    const z = parseFloat(p.get("z") ?? "");
-    if (isFinite(x)) view.current.x = x;
-    if (isFinite(y)) view.current.y = y;
-    if (isFinite(z) && z > 0) view.current.scale = z;
-
     loopRef.current = requestAnimationFrame(renderFrame);
     return () => {
       cancelAnimationFrame(loopRef.current);
@@ -602,6 +610,7 @@ export default function MandelbrotExplorer() {
                     setItersPerLevel(val);
                     config.mandelbrot.ITERS_PER_LEVEL_INIT = val;
                     tileCache.current.clear();
+                    setShowModal(false);
                   }}
                   className="w-32 bg-white/10 text-white text-sm rounded-lg px-3 py-1 border-none cursor-pointer outline-none"
                 >
@@ -632,6 +641,7 @@ export default function MandelbrotExplorer() {
                   onChange={(e) => {
                     setPalette(e.target.value);
                     tileCache.current.clear();
+                    setShowModal(false);
                   }}
                   className="w-32 bg-white/10 text-white text-sm rounded-lg px-3 py-1 border-none cursor-pointer outline-none"
                 >
@@ -704,6 +714,8 @@ export default function MandelbrotExplorer() {
                       x: x.toFixed(decimals),
                       y: y.toFixed(decimals),
                       z: scale.toExponential(1),
+                      p: palette,
+                      i: String(itersPerLevel),
                     });
                     const url = `https://mandelbrot.musat.ai?${params}`;
                     const text = `Check out this Mandelbrot view: ${url}`;

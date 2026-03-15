@@ -3,7 +3,7 @@
 import config from "./config";
 
 export const palettes: Record<string, string> = {
-  "gold": `
+  gold: `
     vec3 palette(int iter, float dotZ) {
         float sn = float(iter) + 1.0 - log2(log2(dotZ) * 0.5);
         float t = fract(pow(sn, 0.35) * 0.15);
@@ -19,13 +19,6 @@ export const palettes: Record<string, string> = {
         else                 return mix(c4, c0, (t - 0.8575) / 0.1425);
     }
   `,
-  grayscale: `
-    vec3 palette(int iter, float dotZ) {
-        float sn = float(iter) + 1.0 - log2(log2(dotZ) * 0.5);
-        float t = fract(pow(sn, 0.35) * 0.15);
-        return vec3(t);
-    }
-  `,
   fire: `
     vec3 palette(int iter, float dotZ) {
         float sn = float(iter) + 1.0 - log2(log2(dotZ) * 0.5);
@@ -38,10 +31,11 @@ export const palettes: Record<string, string> = {
         if      (t < 0.25) return mix(c0, c1, t / 0.25);
         else if (t < 0.50) return mix(c1, c2, (t - 0.25) / 0.25);
         else if (t < 0.75) return mix(c2, c3, (t - 0.50) / 0.25);
-        else               return mix(c3, c4, (t - 0.75) / 0.25);
+        else if (t < 0.99) return mix(c3, c4, (t - 0.75) / 0.19);
+        else               return mix(c4, c0, (t - 0.99) / 0.01);
     }
   `,
-  "rainbow": `
+  rainbow: `
     vec3 palette(int iter, float dotZ) {
         float sn = float(iter) + 1.0 - log2(log2(dotZ) * 0.5);
         float t = fract(pow(sn, 0.35) * 0.15);
@@ -49,6 +43,13 @@ export const palettes: Record<string, string> = {
         float g = 0.5 + 0.5 * cos(6.28318 * (t + 0.333));
         float b = 0.5 + 0.5 * cos(6.28318 * (t + 0.667));
         return vec3(r, g, b);
+    }
+  `,
+  grayscale: `
+    vec3 palette(int iter, float dotZ) {
+        float sn = float(iter) + 1.0 - log2(log2(dotZ) * 0.5);
+        float t = fract(pow(sn, 0.35) * 0.15);
+        return vec3(t);
     }
   `,
 };
