@@ -4,6 +4,7 @@ const config = {
   mandelbrot: {
     BASE_ITERS: 256,
     ITERS_PER_LEVEL_INIT: 256,
+    ITERS_PER_LEVEL_INIT_MOBILE: 64,
     MAX_ITERS: 200000,
     DEFAULT_PALETTE: "gold",
   },

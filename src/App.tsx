@@ -84,7 +84,11 @@ export default function MandelbrotExplorer() {
       config.mandelbrot.ITERS_PER_LEVEL_INIT = val;
       return val;
     }
-    return config.mandelbrot.ITERS_PER_LEVEL_INIT;
+    const defaultIters = isMobile()
+      ? config.mandelbrot.ITERS_PER_LEVEL_INIT_MOBILE
+      : config.mandelbrot.ITERS_PER_LEVEL_INIT;
+    config.mandelbrot.ITERS_PER_LEVEL_INIT = defaultIters;
+    return defaultIters;
   });
   const [palette, setPalette] = useState(() =>
     _urlParams.pal && _urlParams.pal in palettes
