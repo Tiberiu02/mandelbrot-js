@@ -510,7 +510,7 @@ export default function MandelbrotExplorer() {
       clearTimeout(interactionTimeoutRef.current);
     interactionTimeoutRef.current = setTimeout(() => {
       isInteractingRef.current = false;
-    }, 300);
+    }, 150);
     enforceLimits(); // Apply constraints after zoom
   };
 
@@ -585,7 +585,7 @@ export default function MandelbrotExplorer() {
         clearTimeout(interactionTimeoutRef.current);
       interactionTimeoutRef.current = setTimeout(() => {
         isInteractingRef.current = false;
-      }, 300);
+      }, 150);
     }
     containerRef.current?.releasePointerCapture(e.pointerId);
   };
