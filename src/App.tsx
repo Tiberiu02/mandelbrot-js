@@ -96,6 +96,45 @@ export default function MandelbrotExplorer() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Preview animation: after delay, fly to target location
+  useEffect(() => {
+    if (!config.preview.ENABLED) return;
+    let rafId: number;
+    const delayTimer = setTimeout(() => {
+      const startView = { ...view.current };
+      const startLogScale = Math.log(startView.scale);
+      const targetLogScale = Math.log(config.preview.TARGET.z);
+      const startTime = performance.now();
+
+      const k = 50;
+      const norm = 1 - Math.exp(-k);
+
+      const animate = () => {
+        if (isInteractingRef.current) return;
+        const t = Math.min(
+          (performance.now() - startTime) / config.preview.DURATION_MS,
+          1,
+        );
+        const te = t < 1 ? (1 - Math.exp(-k * t)) / norm : 1;
+        view.current.x =
+          startView.x + (config.preview.TARGET.x - startView.x) * te;
+        view.current.y =
+          startView.y + (config.preview.TARGET.y - startView.y) * te;
+        view.current.scale = Math.exp(
+          startLogScale + (targetLogScale - startLogScale) * t,
+        );
+        if (t < 1) rafId = requestAnimationFrame(animate);
+      };
+
+      rafId = requestAnimationFrame(animate);
+    }, config.preview.START_DELAY_MS);
+
+    return () => {
+      clearTimeout(delayTimer);
+      cancelAnimationFrame(rafId);
+    };
+  }, []);
+
   // --- ENFORCE COORDINATE AND ZOOM LIMITS ---
   const enforceLimits = useCallback(() => {
     if (!containerRef.current) return;
@@ -190,12 +229,9 @@ export default function MandelbrotExplorer() {
 
       const targetL = Math.floor(Math.log2(scale / config.tile.TILE_SIZE));
       const currentTilesPerFrame =
-        isInteractingRef.current || showModal
+        (isInteractingRef.current || showModal) && !config.preview.ENABLED
           ? 0
-          : // tilesPerFrameRef.current > 1
-            //   ? 1
-            //   : 0
-            tilesPerFrameRef.current;
+          : tilesPerFrameRef.current;
       let isCurrentFrameIntensive = false;
 
       // 1. Render missing tiles using WebGL Instance Batching

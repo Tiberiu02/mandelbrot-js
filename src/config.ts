@@ -8,6 +8,17 @@ const config = {
     DEFAULT_PALETTE: "gold",
   },
 
+  preview: {
+    ENABLED: false,
+    START_DELAY_MS: 1000,
+    DURATION_MS: 600_000,
+    TARGET: {
+      x: -0.10066630920541,
+      y: -0.95651249869989,
+      z: 1.9e13,
+    },
+  },
+
   tile: {
     TILE_SIZE: 64,
     INITIAL_TILES_PER_FRAME: 16,
