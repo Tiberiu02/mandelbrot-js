@@ -754,7 +754,7 @@ export default function MandelbrotExplorer() {
                   className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm cursor-pointer border-none transition-colors"
                 >
                   <MdShare className="text-base mr-1 shrink-0" /> Share current
-                  view via link
+                  view via link{/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? " with image" : ""}
                 </button>
               </div>
             </div>
