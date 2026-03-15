@@ -41,7 +41,7 @@ The iteration cap scales with zoom depth: `BASE_ITERS + L × ITERS_PER_LEVEL`, c
 
 ### Adaptive Performance
 
-A frame-time EMA tracks rendering cost. When intensive frames consistently run below 20 fps, `tilesPerFrame` is scaled down; above 45 fps it scales back up, keeping the renderer responsive across a wide range of hardware.
+Tile rendering is paused while the user is panning or zooming, keeping interaction smooth. When the view is stationary, a frame-time EMA tracks rendering cost and continuously adjusts `tilesPerFrame` — scaling down when the GPU is under pressure and back up when headroom allows, keeping throughput close to the hardware's sustainable limit.
 
 ### Stack
 
