@@ -754,7 +754,10 @@ export default function MandelbrotExplorer() {
                   className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm cursor-pointer border-none transition-colors"
                 >
                   <MdShare className="text-base mr-1 shrink-0" /> Share current
-                  view via link{/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? " with image" : ""}
+                  view via link
+                  {/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+                    ? " and image"
+                    : ""}
                 </button>
               </div>
             </div>
@@ -766,7 +769,7 @@ export default function MandelbrotExplorer() {
                 href="https://github.com/tiberiu02/mandelbrot-js"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-3 text-sm text-white/80 hover:text-white transition-colors"
+                className="flex items-center gap-3 text-sm text-white opacity-80 hover:opacity-100 transition-opacity"
               >
                 <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xl shrink-0">
                   <FaGithub />
@@ -783,14 +786,16 @@ export default function MandelbrotExplorer() {
                 href="https://musat.ai"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-3 text-sm text-white/80 hover:text-white transition-colors"
+                className="flex items-center gap-3 text-sm text-white opacity-80 hover:opacity-100 transition-opacity"
               >
                 <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-base shrink-0">
                   <FaUser />
                 </div>
                 <div>
                   <div className="font-semibold">Created by Tiberiu Musat</div>
-                  <div className="text-white/40 text-xs">https://musat.ai</div>
+                  <div className="text-white/40 text-xs">
+                    Read more at https://musat.ai
+                  </div>
                 </div>
               </a>
             </div>
