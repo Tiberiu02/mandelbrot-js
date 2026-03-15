@@ -759,6 +759,7 @@ export default function MandelbrotExplorer() {
                       y: y.toFixed(decimals),
                       z: scale.toExponential(1),
                       p: palette,
+                      i: String(itersPerLevel),
                     });
                     const url = `https://mandelbrot.musat.ai?${params}`;
                     const text = `Check out this Mandelbrot view: ${url}`;
