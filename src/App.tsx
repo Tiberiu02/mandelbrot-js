@@ -443,7 +443,7 @@ export default function MandelbrotExplorer() {
           continue;
         }
 
-        ctx.imageSmoothingEnabled = tile.L <= targetL ? false : true;
+        ctx.imageSmoothingEnabled = tile.L <= targetL - 2 ? false : true;
 
         ctx.drawImage(
           tile.canvas,
