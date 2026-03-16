@@ -68,6 +68,72 @@ function splitFloat32(val: number): [number, number] {
   return [hi, lo];
 }
 
+type complex = [number, number];
+
+function cMul(a: complex, b: complex): complex {
+  return [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]];
+}
+
+function cAdd(a: complex, b: complex): complex {
+  return [a[0] + b[0], a[1] + b[1]];
+}
+
+function cNorm2(z: complex): number {
+  return z[0] * z[0] + z[1] * z[1];
+}
+
+function computeTrajectory(
+  cx: number,
+  cy: number,
+  maxIters: number,
+  r: number,
+): {
+  iters: number;
+  totalIters: number;
+  zx: number;
+  zy: number;
+  dzx: number;
+  dzy: number;
+  d2zx: number;
+  d2zy: number;
+} {
+  let z = [0, 0] as complex,
+    dz = [0, 0] as complex,
+    d2z = [0, 0] as complex;
+
+  const D2_LIM = 0.1; // Threshold for second derivative escape
+
+  let iter = 0;
+  while (
+    iter < maxIters &&
+    cNorm2(z) <= 4 &&
+    cNorm2(d2z) * r * r <= cNorm2(dz) * D2_LIM ** 2
+  ) {
+    d2z = cMul(cAdd(cMul(z, d2z), cMul(dz, dz)), [2, 0]);
+    dz = cAdd(cMul(cMul(z, dz), [2, 0]), [1, 0]);
+    z = cAdd(cMul(z, z), [cx, cy]);
+    iter++;
+  }
+
+  let totalIters = iter;
+  let z2 = [z[0], z[1]] as complex;
+  while (totalIters < maxIters && cNorm2(z2) <= 4) {
+    z2 = cAdd(cMul(z2, z2), [cx, cy]);
+    totalIters++;
+  }
+
+  return {
+    iters: iter,
+    totalIters: totalIters,
+    zx: z[0],
+    zy: z[1],
+    dzx: dz[0],
+    dzy: dz[1],
+    d2zx: d2z[0],
+    d2zy: d2z[1],
+  };
+}
+
 export class MandelbrotRenderer {
   public canvas: HTMLCanvasElement | OffscreenCanvas;
   private gl: WebGL2RenderingContext;
@@ -101,8 +167,8 @@ export class MandelbrotRenderer {
       this.canvas.height = totalSize;
     }
 
-    // 8 floats per instance (vec2 x 4)
-    this.instanceData = new Float32Array(maxTilesPerFrame * 8);
+    // 16 floats per instance: topLeftX(2) topLeftY(2) size(2) params(4) skipZ(2) skipDz(2) skipD2z(2)
+    this.instanceData = new Float32Array(maxTilesPerFrame * 16);
 
     const glContext = this.canvas.getContext("webgl2", {
       preserveDrawingBuffer: true,
@@ -125,13 +191,20 @@ export class MandelbrotRenderer {
       in vec2 i_topLeftX;
       in vec2 i_topLeftY;
       in vec2 i_size;
-      in vec2 i_params; // x = maxIterations, y = useDouble
+      in vec4 i_params; // x = maxIterations, y = useDouble, z = skipIters
+      in vec2 i_skipZ;
+      in vec2 i_skipDz;
+      in vec2 i_skipD2z;
 
       out vec2 v_topLeftX;
       out vec2 v_topLeftY;
       out vec2 v_size;
       flat out int v_maxIterations;
       flat out int v_useDouble;
+      flat out int v_skipIters;
+      out vec2 v_skipZ;
+      out vec2 v_skipDz;
+      out vec2 v_skipD2z;
       out vec2 v_uv;
 
       uniform float u_tilesPerRow;
@@ -142,6 +215,10 @@ export class MandelbrotRenderer {
           v_size = i_size;
           v_maxIterations = int(i_params.x);
           v_useDouble = int(i_params.y);
+          v_skipIters = int(i_params.z);
+          v_skipZ = i_skipZ;
+          v_skipDz = i_skipDz;
+          v_skipD2z = i_skipD2z;
 
           // Map quad space (-1 to 1) to UV space (0 to 1)
           v_uv = vec2(a_position.x * 0.5 + 0.5, -a_position.y * 0.5 + 0.5);
@@ -171,6 +248,10 @@ export class MandelbrotRenderer {
       in vec2 v_size;
       flat in int v_maxIterations;
       flat in int v_useDouble;
+      flat in int v_skipIters;
+      in vec2 v_skipZ;
+      in vec2 v_skipDz;
+      in vec2 v_skipD2z;
       in vec2 v_uv;
 
       uniform float u_one; 
@@ -216,24 +297,37 @@ export class MandelbrotRenderer {
         vec2 cx = df_add(v_topLeftX, df_mul(v_size, uv_x));
         vec2 cy = df_add(v_topLeftY, df_mul(v_size, uv_y));
         
-        int iter = 0;
         float dotZ = 0.0;
-        
+
+        // Delta from tile center for Taylor expansion
+        float delta_x = (v_uv.x - 0.5) * v_size.x;
+        float delta_y = (v_uv.y - 0.5) * v_size.x;
+        float d2x = delta_x * delta_x - delta_y * delta_y;
+        float d2y = 2.0 * delta_x * delta_y;
+        float z0x = v_skipZ.x
+            + (v_skipDz.x * delta_x - v_skipDz.y * delta_y)
+            + 0.5 * (v_skipD2z.x * d2x - v_skipD2z.y * d2y);
+        float z0y = v_skipZ.y
+            + (v_skipDz.x * delta_y + v_skipDz.y * delta_x)
+            + 0.5 * (v_skipD2z.x * d2y + v_skipD2z.y * d2x);
+
+        int iter = v_skipIters;
+
         if (v_useDouble == 1) {
-            vec2 zx = vec2(0.0);
-            vec2 zy = vec2(0.0);
-            
-            for(int i = 0; i < ${config.mandelbrot.MAX_ITERS}; i++) {
+            vec2 zx = vec2(z0x, 0.0);
+            vec2 zy = vec2(z0y, 0.0);
+
+            for(int i = v_skipIters; i < ${config.mandelbrot.MAX_ITERS}; i++) {
                 if (i >= v_maxIterations) break;
-                
+
                 vec2 x2 = df_mul(zx, zx);
                 vec2 y2 = df_mul(zy, zy);
-                
+
                 if (x2.x + y2.x > 256.0) {
                     dotZ = x2.x + y2.x;
                     break;
                 }
-                
+
                 vec2 zxy = df_mul(zx, zy);
                 zxy = df_mul(zxy, vec2(2.0, 0.0));
                 zy = df_add(zxy, cy);
@@ -241,22 +335,22 @@ export class MandelbrotRenderer {
                 iter++;
             }
         } else {
-            float zx = 0.0;
-            float zy = 0.0;
+            float zx = z0x;
+            float zy = z0y;
             float cx_f = cx.x;
             float cy_f = cy.x;
-            
-            for(int i = 0; i < ${config.mandelbrot.MAX_ITERS}; i++) {
+
+            for(int i = v_skipIters; i < ${config.mandelbrot.MAX_ITERS}; i++) {
                 if (i >= v_maxIterations) break;
-                
+
                 float x2 = zx * zx;
                 float y2 = zy * zy;
-                
+
                 if (x2 + y2 > 256.0) {
                     dotZ = x2 + y2;
                     break;
                 }
-                
+
                 zy = 2.0 * zx * zy + cy_f;
                 zx = x2 - y2 + cx_f;
                 iter++;
@@ -311,7 +405,7 @@ export class MandelbrotRenderer {
       gl.DYNAMIC_DRAW,
     );
 
-    const stride = 8 * 4; // 8 floats per instance, 4 bytes each
+    const stride = 16 * 4; // 16 floats per instance, 4 bytes each
 
     const loc_topLeftX = gl.getAttribLocation(this.program, "i_topLeftX");
     gl.enableVertexAttribArray(loc_topLeftX);
@@ -330,8 +424,23 @@ export class MandelbrotRenderer {
 
     const loc_params = gl.getAttribLocation(this.program, "i_params");
     gl.enableVertexAttribArray(loc_params);
-    gl.vertexAttribPointer(loc_params, 2, gl.FLOAT, false, stride, 24);
+    gl.vertexAttribPointer(loc_params, 4, gl.FLOAT, false, stride, 24);
     gl.vertexAttribDivisor(loc_params, 1);
+
+    const loc_skipZ = gl.getAttribLocation(this.program, "i_skipZ");
+    gl.enableVertexAttribArray(loc_skipZ);
+    gl.vertexAttribPointer(loc_skipZ, 2, gl.FLOAT, false, stride, 40);
+    gl.vertexAttribDivisor(loc_skipZ, 1);
+
+    const loc_skipDz = gl.getAttribLocation(this.program, "i_skipDz");
+    gl.enableVertexAttribArray(loc_skipDz);
+    gl.vertexAttribPointer(loc_skipDz, 2, gl.FLOAT, false, stride, 48);
+    gl.vertexAttribDivisor(loc_skipDz, 1);
+
+    const loc_skipD2z = gl.getAttribLocation(this.program, "i_skipD2z");
+    gl.enableVertexAttribArray(loc_skipD2z);
+    gl.vertexAttribPointer(loc_skipD2z, 2, gl.FLOAT, false, stride, 56);
+    gl.vertexAttribDivisor(loc_skipD2z, 1);
 
     gl.bindVertexArray(null);
 
@@ -357,6 +466,9 @@ export class MandelbrotRenderer {
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
 
+    let iters = 0;
+    let totalIters = 0;
+
     // Populate instance data array
     for (let i = 0; i < tiles.length; i++) {
       const t = tiles[i];
@@ -364,7 +476,17 @@ export class MandelbrotRenderer {
       const [fyH, fyL] = splitFloat32(t.fy);
       const [sizeH, sizeL] = splitFloat32(t.size);
 
-      const offset = i * 8;
+      const traj = computeTrajectory(
+        t.fx + t.size * 0.5,
+        t.fy + t.size * 0.5,
+        t.iters,
+        t.size / Math.sqrt(2),
+      );
+
+      iters += traj.iters;
+      totalIters += traj.totalIters;
+
+      const offset = i * 16;
       this.instanceData[offset + 0] = fxH;
       this.instanceData[offset + 1] = fxL;
       this.instanceData[offset + 2] = fyH;
@@ -373,7 +495,17 @@ export class MandelbrotRenderer {
       this.instanceData[offset + 5] = sizeL;
       this.instanceData[offset + 6] = t.iters;
       this.instanceData[offset + 7] = t.useDouble ? 1 : 0;
+      this.instanceData[offset + 8] = traj.iters;
+      this.instanceData[offset + 9] = 0; // padding (vec4 alignment)
+      this.instanceData[offset + 10] = traj.zx;
+      this.instanceData[offset + 11] = traj.zy;
+      this.instanceData[offset + 12] = traj.dzx;
+      this.instanceData[offset + 13] = traj.dzy;
+      this.instanceData[offset + 14] = traj.d2zx;
+      this.instanceData[offset + 15] = traj.d2zy;
     }
+
+    console.log("Gain:", totalIters / (totalIters - iters));
 
     // Push buffer changes for active instances
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
@@ -382,7 +514,7 @@ export class MandelbrotRenderer {
       0,
       this.instanceData,
       0,
-      tiles.length * 8,
+      tiles.length * 16,
     );
 
     const one = 0.5 * Math.round(Math.random() * 100000) * 0.00001;
