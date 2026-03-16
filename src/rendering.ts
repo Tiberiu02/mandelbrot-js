@@ -68,6 +68,9 @@ function splitFloat32(val: number): [number, number] {
   return [hi, lo];
 }
 
+const start = performance.now();
+const reached = {} as Record<number, boolean>;
+
 export class MandelbrotRenderer {
   public canvas: HTMLCanvasElement | OffscreenCanvas;
   private gl: WebGL2RenderingContext;
@@ -79,6 +82,7 @@ export class MandelbrotRenderer {
   private loc_magic_a!: WebGLUniformLocation | null;
   private loc_magic_b!: WebGLUniformLocation | null;
   private loc_tilesPerRow!: WebGLUniformLocation | null;
+  private loc_physicalSize!: WebGLUniformLocation | null;
 
   public physicalSize: number;
   public tilesPerRow: number;
@@ -133,8 +137,10 @@ export class MandelbrotRenderer {
       flat out int v_maxIterations;
       flat out int v_useDouble;
       out vec2 v_uv;
+      flat out float v_pixel_size;
 
       uniform float u_tilesPerRow;
+      uniform float u_physicalSize;
 
       void main() {
           v_topLeftX = i_topLeftX;
@@ -142,6 +148,7 @@ export class MandelbrotRenderer {
           v_size = i_size;
           v_maxIterations = int(i_params.x);
           v_useDouble = int(i_params.y);
+          v_pixel_size = i_size.x / u_physicalSize;
 
           // Map quad space (-1 to 1) to UV space (0 to 1)
           v_uv = vec2(a_position.x * 0.5 + 0.5, -a_position.y * 0.5 + 0.5);
@@ -172,6 +179,7 @@ export class MandelbrotRenderer {
       flat in int v_maxIterations;
       flat in int v_useDouble;
       in vec2 v_uv;
+      flat in float v_pixel_size;
 
       uniform float u_one; 
       uniform float u_other; 
@@ -219,48 +227,56 @@ export class MandelbrotRenderer {
         int iter = 0;
         float dotZ = 0.0;
         
-        if (v_useDouble == 1) {
-            vec2 zx = vec2(0.0);
-            vec2 zy = vec2(0.0);
+        vec2 zx = vec2(0.0);
+        vec2 zy = vec2(0.0);
+
+        // Compute derivative in single precision
+        vec2 dz = vec2(0.0);
+        
+        for(; iter < ${config.mandelbrot.MAX_ITERS}; iter++) {
+            if (iter >= v_maxIterations) break;
+
+            float dz_norm2 = dz.x * dz.x + dz.y * dz.y;
+            if (dz_norm2 * v_pixel_size * v_pixel_size > 1e-8) break;
             
-            for(int i = 0; i < ${config.mandelbrot.MAX_ITERS}; i++) {
-                if (i >= v_maxIterations) break;
-                
-                vec2 x2 = df_mul(zx, zx);
-                vec2 y2 = df_mul(zy, zy);
-                
-                if (x2.x + y2.x > 256.0) {
-                    dotZ = x2.x + y2.x;
-                    break;
-                }
-                
-                vec2 zxy = df_mul(zx, zy);
-                zxy = df_mul(zxy, vec2(2.0, 0.0));
-                zy = df_add(zxy, cy);
-                zx = df_add(df_sub(x2, y2), cx);
-                iter++;
-            }
-        } else {
-            float zx = 0.0;
-            float zy = 0.0;
-            float cx_f = cx.x;
-            float cy_f = cy.x;
+            dz = vec2(
+              2.0 * (dz.x * (zx.x + zx.y) - dz.y * (zy.x + zy.y)) + 1.0,
+              2.0 * (dz.x * (zy.x + zy.y) + dz.y * (zx.x + zx.y))
+            );
             
-            for(int i = 0; i < ${config.mandelbrot.MAX_ITERS}; i++) {
-                if (i >= v_maxIterations) break;
-                
-                float x2 = zx * zx;
-                float y2 = zy * zy;
-                
-                if (x2 + y2 > 256.0) {
-                    dotZ = x2 + y2;
-                    break;
-                }
-                
-                zy = 2.0 * zx * zy + cy_f;
-                zx = x2 - y2 + cx_f;
-                iter++;
+            vec2 x2 = df_mul(zx, zx);
+            vec2 y2 = df_mul(zy, zy);
+            
+            if (x2.x + y2.x > 256.0) {
+                dotZ = x2.x + y2.x + x2.y + y2.y; // Use high precision for escape time
+                break;
             }
+            
+            vec2 zxy = df_mul(zx, zy);
+            zxy = df_mul(zxy, vec2(2.0, 0.0));
+            zy = df_add(zxy, cy);
+            zx = df_add(df_sub(x2, y2), cx);
+        }
+            
+        // Resume in single precition
+        float zx_f = zx.x + zx.y;
+        float zy_f = zy.x + zy.y;
+        float cx_f = cx.x + cx.y;
+        float cy_f = cy.x + cy.y;
+            
+        for(; iter < ${config.mandelbrot.MAX_ITERS}; iter++) {
+            if (iter >= v_maxIterations) break;
+            
+            float x2 = zx_f * zx_f;
+            float y2 = zy_f * zy_f;
+            
+            if (x2 + y2 > 256.0) {
+                dotZ = x2 + y2;
+                break;
+            }
+            
+            zy_f = 2.0 * zx_f * zy_f + cy_f;
+            zx_f = x2 - y2 + cx_f;
         }
         
         if (iter >= v_maxIterations) {
@@ -340,6 +356,10 @@ export class MandelbrotRenderer {
     this.loc_magic_a = gl.getUniformLocation(this.program, "u_magicA");
     this.loc_magic_b = gl.getUniformLocation(this.program, "u_magicB");
     this.loc_tilesPerRow = gl.getUniformLocation(this.program, "u_tilesPerRow");
+    this.loc_physicalSize = gl.getUniformLocation(
+      this.program,
+      "u_physicalSize",
+    );
   }
 
   public delete() {
@@ -363,6 +383,12 @@ export class MandelbrotRenderer {
       const [fxH, fxL] = splitFloat32(t.fx);
       const [fyH, fyL] = splitFloat32(t.fy);
       const [sizeH, sizeL] = splitFloat32(t.size);
+
+      if (reached[t.size] === undefined) {
+        reached[t.size] = true;
+        const now = performance.now();
+        console.log(`Reached size ${t.size} at ${(now - start).toFixed(2)} ms`);
+      }
 
       const offset = i * 8;
       this.instanceData[offset + 0] = fxH;
@@ -392,6 +418,7 @@ export class MandelbrotRenderer {
     gl.uniform1f(this.loc_magic_a, 2048.0 + one);
     gl.uniform1f(this.loc_magic_b, 2048.0 + other);
     gl.uniform1f(this.loc_tilesPerRow, this.tilesPerRow);
+    gl.uniform1f(this.loc_physicalSize, this.physicalSize);
 
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, tiles.length);
