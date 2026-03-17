@@ -1,5 +1,6 @@
 // --- WEBGL RENDERER LOGIC ---
 
+import Decimal from "decimal.js";
 import config from "./config";
 
 export const palettes: Record<string, string> = {
@@ -55,8 +56,8 @@ export const palettes: Record<string, string> = {
 };
 
 export interface RenderBatchParams {
-  fx: number;
-  fy: number;
+  fx: Decimal;
+  fy: Decimal;
   size: number;
   iters: number;
   useDouble: boolean;
@@ -68,40 +69,44 @@ function splitFloat32(val: number): [number, number] {
   return [hi, lo];
 }
 
-type complex = [number, number];
+type complex = [Decimal, Decimal];
 
 function cMul(a: complex, b: complex): complex {
-  return [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]];
+  return [
+    a[0].mul(b[0]).sub(a[1].mul(b[1])),
+    a[0].mul(b[1]).add(a[1].mul(b[0])),
+  ];
 }
 
 function cAdd(a: complex, b: complex): complex {
-  return [a[0] + b[0], a[1] + b[1]];
+  return [a[0].add(b[0]), a[1].add(b[1])];
 }
 
 function cNorm2(z: complex): number {
-  return z[0] * z[0] + z[1] * z[1];
+  return z[0].toNumber() ** 2 + z[1].toNumber() ** 2;
 }
 
 function computeTrajectory(
-  cx: number,
-  cy: number,
+  cx: Decimal,
+  cy: Decimal,
   maxIters: number,
   r: number,
+  size: number,
 ): {
   iters: number;
   totalIters: number;
   zx: number;
   zy: number;
-  dzx: number;
-  dzy: number;
-  d2zx: number;
-  d2zy: number;
+  dzScaledX: number; // dz.re * size
+  dzScaledY: number; // dz.im * size
+  d2zScaledX: number; // 0.5 * d2z.re * size^2
+  d2zScaledY: number; // 0.5 * d2z.im * size^2
 } {
-  let z = [0, 0] as complex,
-    dz = [0, 0] as complex,
-    d2z = [0, 0] as complex;
+  let z = [Decimal(0), Decimal(0)] as complex,
+    dz = [Decimal(0), Decimal(0)] as complex,
+    d2z = [Decimal(0), Decimal(0)] as complex;
 
-  const D2_LIM = 0.1; // Threshold for second derivative escape
+  const D2_LIM = 0.01; // Threshold for second derivative escape
 
   let iter = 0;
   while (
@@ -109,11 +114,16 @@ function computeTrajectory(
     cNorm2(z) <= 4 &&
     cNorm2(d2z) * r * r <= cNorm2(dz) * D2_LIM ** 2
   ) {
-    d2z = cMul(cAdd(cMul(z, d2z), cMul(dz, dz)), [2, 0]);
-    dz = cAdd(cMul(cMul(z, dz), [2, 0]), [1, 0]);
+    d2z = cMul(cAdd(cMul(z, d2z), cMul(dz, dz)), [Decimal(2), Decimal(0)]);
+    dz = cAdd(cMul(cMul(z, dz), [Decimal(2), Decimal(0)]), [
+      Decimal(1),
+      Decimal(0),
+    ]);
     z = cAdd(cMul(z, z), [cx, cy]);
     iter++;
   }
+
+  console.log("computed:", iter);
 
   let totalIters = iter;
   let z2 = [z[0], z[1]] as complex;
@@ -122,15 +132,24 @@ function computeTrajectory(
     totalIters++;
   }
 
+  console.log({
+    zx: z[0].toNumber(),
+    zy: z[1].toNumber(),
+    dzx: dz[0].toNumber(),
+    dzy: dz[1].toNumber(),
+    d2zx: d2z[0].toNumber(),
+    d2zy: d2z[1].toNumber(),
+  });
+
   return {
     iters: iter,
     totalIters: totalIters,
-    zx: z[0],
-    zy: z[1],
-    dzx: dz[0],
-    dzy: dz[1],
-    d2zx: d2z[0],
-    d2zy: d2z[1],
+    zx: z[0].toNumber(),
+    zy: z[1].toNumber(),
+    dzScaledX: dz[0].toNumber() * size,
+    dzScaledY: dz[1].toNumber() * size,
+    d2zScaledX: d2z[0].toNumber() * size * 0.5 * size,
+    d2zScaledY: d2z[1].toNumber() * size * 0.5 * size,
   };
 }
 
@@ -188,17 +207,15 @@ export class MandelbrotRenderer {
     const vsSource = `#version 300 es
       in vec2 a_position;
       
-      in vec2 i_topLeftX;
-      in vec2 i_topLeftY;
-      in vec2 i_size;
+      in vec2 i_cxCenter;
+      in vec2 i_cyCenter;
       in vec4 i_params; // x = maxIterations, y = useDouble, z = skipIters
       in vec2 i_skipZ;
-      in vec2 i_skipDz;
-      in vec2 i_skipD2z;
+      in vec2 i_skipDz;  // pre-scaled: dz * size
+      in vec2 i_skipD2z; // pre-scaled: 0.5 * d2z * size^2
 
-      out vec2 v_topLeftX;
-      out vec2 v_topLeftY;
-      out vec2 v_size;
+      out vec2 v_cxCenter;
+      out vec2 v_cyCenter;
       flat out int v_maxIterations;
       flat out int v_useDouble;
       flat out int v_skipIters;
@@ -210,9 +227,8 @@ export class MandelbrotRenderer {
       uniform float u_tilesPerRow;
 
       void main() {
-          v_topLeftX = i_topLeftX;
-          v_topLeftY = i_topLeftY;
-          v_size = i_size;
+          v_cxCenter = i_cxCenter;
+          v_cyCenter = i_cyCenter;
           v_maxIterations = int(i_params.x);
           v_useDouble = int(i_params.y);
           v_skipIters = int(i_params.z);
@@ -243,15 +259,14 @@ export class MandelbrotRenderer {
     const fsSource = `#version 300 es
       precision highp float;
       
-      in vec2 v_topLeftX;
-      in vec2 v_topLeftY;
-      in vec2 v_size;
+      in vec2 v_cxCenter;
+      in vec2 v_cyCenter;
       flat in int v_maxIterations;
       flat in int v_useDouble;
       flat in int v_skipIters;
       in vec2 v_skipZ;
-      in vec2 v_skipDz;
-      in vec2 v_skipD2z;
+      in vec2 v_skipDz;  // pre-scaled: dz * size
+      in vec2 v_skipD2z; // pre-scaled: 0.5 * d2z * size^2
       in vec2 v_uv;
 
       uniform float u_one; 
@@ -291,25 +306,23 @@ export class MandelbrotRenderer {
       }
 
       void main() {
-        vec2 uv_x = vec2(v_uv.x, 0.0);
-        vec2 uv_y = vec2(v_uv.y, 0.0);
-        
-        vec2 cx = df_add(v_topLeftX, df_mul(v_size, uv_x));
-        vec2 cy = df_add(v_topLeftY, df_mul(v_size, uv_y));
-        
+        vec2 cx = v_cxCenter;
+        vec2 cy = v_cyCenter;
+
         float dotZ = 0.0;
 
-        // Delta from tile center for Taylor expansion
-        float delta_x = (v_uv.x - 0.5) * v_size.x;
-        float delta_y = (v_uv.y - 0.5) * v_size.x;
-        float d2x = delta_x * delta_x - delta_y * delta_y;
-        float d2y = 2.0 * delta_x * delta_y;
+        // uv offset from tile center, in [-0.5, 0.5]
+        // derivatives are pre-scaled by size (and size^2), so no size needed here
+        float u = v_uv.x - 0.5;
+        float v = v_uv.y - 0.5;
+        float u2mv2 = u * u - v * v;
+        float uv2 = 2.0 * u * v;
         float z0x = v_skipZ.x
-            + (v_skipDz.x * delta_x - v_skipDz.y * delta_y)
-            + 0.5 * (v_skipD2z.x * d2x - v_skipD2z.y * d2y);
+            + (v_skipDz.x * u  - v_skipDz.y * v)
+            + (v_skipD2z.x * u2mv2 - v_skipD2z.y * uv2);
         float z0y = v_skipZ.y
-            + (v_skipDz.x * delta_y + v_skipDz.y * delta_x)
-            + 0.5 * (v_skipD2z.x * d2y + v_skipD2z.y * d2x);
+            + (v_skipDz.x * v  + v_skipDz.y * u)
+            + (v_skipD2z.x * uv2    + v_skipD2z.y * u2mv2);
 
         int iter = v_skipIters;
 
@@ -407,20 +420,15 @@ export class MandelbrotRenderer {
 
     const stride = 16 * 4; // 16 floats per instance, 4 bytes each
 
-    const loc_topLeftX = gl.getAttribLocation(this.program, "i_topLeftX");
-    gl.enableVertexAttribArray(loc_topLeftX);
-    gl.vertexAttribPointer(loc_topLeftX, 2, gl.FLOAT, false, stride, 0);
-    gl.vertexAttribDivisor(loc_topLeftX, 1);
+    const loc_cxCenter = gl.getAttribLocation(this.program, "i_cxCenter");
+    gl.enableVertexAttribArray(loc_cxCenter);
+    gl.vertexAttribPointer(loc_cxCenter, 2, gl.FLOAT, false, stride, 0);
+    gl.vertexAttribDivisor(loc_cxCenter, 1);
 
-    const loc_topLeftY = gl.getAttribLocation(this.program, "i_topLeftY");
-    gl.enableVertexAttribArray(loc_topLeftY);
-    gl.vertexAttribPointer(loc_topLeftY, 2, gl.FLOAT, false, stride, 8);
-    gl.vertexAttribDivisor(loc_topLeftY, 1);
-
-    const loc_size = gl.getAttribLocation(this.program, "i_size");
-    gl.enableVertexAttribArray(loc_size);
-    gl.vertexAttribPointer(loc_size, 2, gl.FLOAT, false, stride, 16);
-    gl.vertexAttribDivisor(loc_size, 1);
+    const loc_cyCenter = gl.getAttribLocation(this.program, "i_cyCenter");
+    gl.enableVertexAttribArray(loc_cyCenter);
+    gl.vertexAttribPointer(loc_cyCenter, 2, gl.FLOAT, false, stride, 8);
+    gl.vertexAttribDivisor(loc_cyCenter, 1);
 
     const loc_params = gl.getAttribLocation(this.program, "i_params");
     gl.enableVertexAttribArray(loc_params);
@@ -472,37 +480,39 @@ export class MandelbrotRenderer {
     // Populate instance data array
     for (let i = 0; i < tiles.length; i++) {
       const t = tiles[i];
-      const [fxH, fxL] = splitFloat32(t.fx);
-      const [fyH, fyL] = splitFloat32(t.fy);
-      const [sizeH, sizeL] = splitFloat32(t.size);
+      const cxCenter = t.fx.add(t.size * 0.5);
+      const cyCenter = t.fy.add(t.size * 0.5);
+      const [cxH, cxL] = splitFloat32(cxCenter.toNumber());
+      const [cyH, cyL] = splitFloat32(cyCenter.toNumber());
 
       const traj = computeTrajectory(
-        t.fx + t.size * 0.5,
-        t.fy + t.size * 0.5,
+        cxCenter,
+        cyCenter,
         t.iters,
         t.size / Math.sqrt(2),
+        t.size,
       );
 
       iters += traj.iters;
       totalIters += traj.totalIters;
 
       const offset = i * 16;
-      this.instanceData[offset + 0] = fxH;
-      this.instanceData[offset + 1] = fxL;
-      this.instanceData[offset + 2] = fyH;
-      this.instanceData[offset + 3] = fyL;
-      this.instanceData[offset + 4] = sizeH;
-      this.instanceData[offset + 5] = sizeL;
+      this.instanceData[offset + 0] = cxH;
+      this.instanceData[offset + 1] = cxL;
+      this.instanceData[offset + 2] = cyH;
+      this.instanceData[offset + 3] = cyL;
+      this.instanceData[offset + 4] = 0; // padding (freed from i_size)
+      this.instanceData[offset + 5] = 0;
       this.instanceData[offset + 6] = t.iters;
       this.instanceData[offset + 7] = t.useDouble ? 1 : 0;
       this.instanceData[offset + 8] = traj.iters;
       this.instanceData[offset + 9] = 0; // padding (vec4 alignment)
       this.instanceData[offset + 10] = traj.zx;
       this.instanceData[offset + 11] = traj.zy;
-      this.instanceData[offset + 12] = traj.dzx;
-      this.instanceData[offset + 13] = traj.dzy;
-      this.instanceData[offset + 14] = traj.d2zx;
-      this.instanceData[offset + 15] = traj.d2zy;
+      this.instanceData[offset + 12] = traj.dzScaledX;
+      this.instanceData[offset + 13] = traj.dzScaledY;
+      this.instanceData[offset + 14] = traj.d2zScaledX;
+      this.instanceData[offset + 15] = traj.d2zScaledY;
     }
 
     console.log("Gain:", totalIters / (totalIters - iters));

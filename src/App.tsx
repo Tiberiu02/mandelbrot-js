@@ -4,19 +4,23 @@ import config from "./config";
 import { MdDownload, MdShare, MdClose, MdSettings } from "react-icons/md";
 import { FaGithub } from "react-icons/fa";
 import { FaUser } from "react-icons/fa6";
+import { Decimal } from "decimal.js";
+
+// Set global precision to 100 significant digits
+Decimal.set({ precision: config.perturbation.NUM_DECIMALS });
 
 interface TileData {
   L: number;
-  x: number;
-  y: number;
+  x: Decimal;
+  y: Decimal;
   key: string;
   fractalSize: number;
   canvas: HTMLCanvasElement;
 }
 
 interface ViewState {
-  x: number;
-  y: number;
+  x: Decimal;
+  y: Decimal;
   scale: number;
 }
 
@@ -59,8 +63,8 @@ export default function MandelbrotExplorer() {
 
   const tileCache = useRef<Map<string, TileData>>(new Map());
   const view = useRef<ViewState>({
-    x: isFinite(_urlParams.x) ? _urlParams.x : -0.5,
-    y: isFinite(_urlParams.y) ? _urlParams.y : 0,
+    x: new Decimal(isFinite(_urlParams.x) ? _urlParams.x : -0.5),
+    y: new Decimal(isFinite(_urlParams.y) ? _urlParams.y : 0),
     scale: isFinite(_urlParams.z) && _urlParams.z > 0 ? _urlParams.z : 100,
   });
   const activePointers = useRef<Map<number, Point>>(new Map());
@@ -124,10 +128,12 @@ export default function MandelbrotExplorer() {
           1,
         );
         const te = t < 1 ? (1 - Math.exp(-k * t)) / norm : 1;
-        view.current.x =
-          startView.x + (config.preview.TARGET.x - startView.x) * te;
-        view.current.y =
-          startView.y + (config.preview.TARGET.y - startView.y) * te;
+        view.current.x = startView.x.add(
+          Decimal(config.preview.TARGET.x).sub(startView.x).mul(te),
+        );
+        view.current.y = startView.y.add(
+          Decimal(config.preview.TARGET.y).sub(startView.y).mul(te),
+        );
         view.current.scale = Math.exp(
           startLogScale + (targetLogScale - startLogScale) * t,
         );
@@ -175,22 +181,26 @@ export default function MandelbrotExplorer() {
     // Handle X Bounds
     if (minAllowedX > maxAllowedX) {
       // Screen is wider than allowed world bounds at this scale - lock to center
-      view.current.x = (BOUNDS_MIN_X + BOUNDS_MAX_X) / 2;
+      view.current.x = new Decimal(BOUNDS_MIN_X)
+        .add(new Decimal(BOUNDS_MAX_X))
+        .dividedBy(2);
     } else {
-      view.current.x = Math.max(
-        minAllowedX,
-        Math.min(maxAllowedX, view.current.x),
+      view.current.x = Decimal.max(
+        Decimal(minAllowedX),
+        Decimal.min(maxAllowedX, view.current.x),
       );
     }
 
     // Handle Y Bounds
     if (minAllowedY > maxAllowedY) {
       // Screen is taller than allowed world bounds at this scale - lock to center
-      view.current.y = (BOUNDS_MIN_Y + BOUNDS_MAX_Y) / 2;
+      view.current.y = new Decimal(BOUNDS_MIN_Y)
+        .add(new Decimal(BOUNDS_MAX_Y))
+        .dividedBy(2);
     } else {
-      view.current.y = Math.max(
-        minAllowedY,
-        Math.min(maxAllowedY, view.current.y),
+      view.current.y = Decimal.max(
+        Decimal(minAllowedY),
+        Decimal.min(maxAllowedY, view.current.y),
       );
     }
   }, []);
@@ -229,10 +239,10 @@ export default function MandelbrotExplorer() {
       const { x: vx, y: vy, scale } = view.current;
 
       const worldBounds = {
-        left: vx - width / 2 / scale,
-        right: vx + width / 2 / scale,
-        top: vy - height / 2 / scale,
-        bottom: vy + height / 2 / scale,
+        left: vx.sub(width / 2 / scale),
+        right: vx.add(width / 2 / scale),
+        top: vy.sub(height / 2 / scale),
+        bottom: vy.add(height / 2 / scale),
       };
 
       const targetL = Math.floor(Math.log2(scale / config.tile.TILE_SIZE));
@@ -252,13 +262,13 @@ export default function MandelbrotExplorer() {
           }
 
           const fSize = Math.pow(2, -L);
-          const minX = Math.floor(worldBounds.left / fSize);
-          const maxX = Math.floor(worldBounds.right / fSize);
-          const minY = Math.floor(worldBounds.top / fSize);
-          const maxY = Math.floor(worldBounds.bottom / fSize);
+          const minX = Decimal.floor(worldBounds.left.div(fSize));
+          const maxX = Decimal.floor(worldBounds.right.div(fSize));
+          const minY = Decimal.floor(worldBounds.top.div(fSize));
+          const maxY = Decimal.floor(worldBounds.bottom.div(fSize));
 
-          for (let tx = minX; tx <= maxX; tx++) {
-            for (let ty = minY; ty <= maxY; ty++) {
+          for (let tx = minX; tx.lessThanOrEqualTo(maxX); tx = tx.add(1)) {
+            for (let ty = minY; ty.lessThanOrEqualTo(maxY); ty = ty.add(1)) {
               const key = `${L}_${tx}_${ty}`;
               if (!tileCache.current.has(key)) {
                 missing.push({ L, x: tx, y: ty, key, fSize });
@@ -269,15 +279,15 @@ export default function MandelbrotExplorer() {
 
         if (missing.length > 0) {
           missing.sort((a, b) => {
-            const distA = Math.hypot(
-              (a.x + 0.5) * a.fSize - vx,
-              (a.y + 0.5) * a.fSize - vy,
+            const distA = Decimal.hypot(
+              a.x.add(0.5).mul(a.fSize).sub(vx),
+              a.y.add(0.5).mul(a.fSize).sub(vy),
             );
-            const distB = Math.hypot(
-              (b.x + 0.5) * b.fSize - vx,
-              (b.y + 0.5) * b.fSize - vy,
+            const distB = Decimal.hypot(
+              b.x.add(0.5).mul(b.fSize).sub(vx),
+              b.y.add(0.5).mul(b.fSize).sub(vy),
             );
-            return a.L - b.L || distA - distB;
+            return a.L - b.L || distA.sub(distB).toNumber();
           });
 
           const targets = missing.slice(0, currentTilesPerFrame);
@@ -302,8 +312,8 @@ export default function MandelbrotExplorer() {
           // --- Execute Batched Draw Call ---
           rendererRef.current.renderBatch(
             targets.map((target) => ({
-              fx: target.x * target.fSize,
-              fy: target.y * target.fSize,
+              fx: target.x.mul(target.fSize),
+              fy: target.y.mul(target.fSize),
               size: target.fSize,
               iters: iterationsAtLevel(target.L),
               useDouble: scale > 1e7,
@@ -342,21 +352,21 @@ export default function MandelbrotExplorer() {
               for (let dL = 1; dL <= 4; dL++) {
                 const pL = target.L - dL;
                 const divisor = Math.pow(2, dL);
-                const px = Math.floor(target.x / divisor);
-                const py = Math.floor(target.y / divisor);
+                const px = Decimal.floor(target.x.div(divisor));
+                const py = Decimal.floor(target.y.div(divisor));
                 const pKey = `${pL}_${px}_${py}`;
 
                 const parentTile = tileCache.current.get(pKey);
                 if (parentTile) {
                   const pCtx = parentTile.canvas.getContext("2d");
                   if (pCtx) {
-                    const rx = target.x - px * divisor;
-                    const ry = target.y - py * divisor;
+                    const rx = target.x.sub(px.mul(divisor));
+                    const ry = target.y.sub(py.mul(divisor));
                     const subSize = physicalSize / divisor;
                     pCtx.drawImage(
                       tileCanvas,
-                      rx * subSize,
-                      ry * subSize,
+                      rx.mul(subSize).toNumber(),
+                      ry.mul(subSize).toNumber(),
                       subSize,
                       subSize,
                     );
@@ -405,11 +415,13 @@ export default function MandelbrotExplorer() {
       // 2. Cleanup distant tiles
       for (const [key, tile] of tileCache.current.entries()) {
         const isTooDeep = tile.L > targetL + 5;
-        const dist = Math.hypot(
-          (tile.x + 0.5) * tile.fractalSize - vx,
-          (tile.y + 0.5) * tile.fractalSize - vy,
+        const dist = Decimal.hypot(
+          tile.x.add(0.5).mul(tile.fractalSize).sub(vx),
+          tile.y.add(0.5).mul(tile.fractalSize).sub(vy),
         );
-        const isTooFar = dist > (width * 3) / scale + tile.fractalSize;
+        const isTooFar = dist.greaterThan(
+          (width * 3) / scale + tile.fractalSize,
+        );
 
         if (isTooDeep || isTooFar) tileCache.current.delete(key);
       }
@@ -426,11 +438,11 @@ export default function MandelbrotExplorer() {
         .sort((a, b) => a.L - b.L);
 
       for (const tile of drawableTiles) {
-        const tx = tile.x * tile.fractalSize;
-        const ty = tile.y * tile.fractalSize;
+        const tx = tile.x.mul(tile.fractalSize);
+        const ty = tile.y.mul(tile.fractalSize);
 
-        const screenX = cx + (tx - vx) * physicalScale;
-        const screenY = cy + (ty - vy) * physicalScale;
+        const screenX = cx + tx.sub(vx).mul(physicalScale).toNumber();
+        const screenY = cy + ty.sub(vy).mul(physicalScale).toNumber();
         const drawSize = tile.fractalSize * physicalScale;
 
         if (
@@ -498,12 +510,12 @@ export default function MandelbrotExplorer() {
     const mx = e.clientX - rect.left - rect.width / 2;
     const my = e.clientY - rect.top - rect.height / 2;
 
-    const fx = view.current.x + mx / view.current.scale;
-    const fy = view.current.y + my / view.current.scale;
+    const fx = view.current.x.add(mx / view.current.scale);
+    const fy = view.current.y.add(my / view.current.scale);
 
     view.current.scale *= zoomMultiplier;
-    view.current.x = fx - mx / view.current.scale;
-    view.current.y = fy - my / view.current.scale;
+    view.current.x = fx.sub(mx / view.current.scale);
+    view.current.y = fy.sub(my / view.current.scale);
 
     isInteractingRef.current = true;
     if (interactionTimeoutRef.current)
@@ -531,8 +543,8 @@ export default function MandelbrotExplorer() {
     if (activePointers.current.size === 1) {
       const dx = curr.x - prev.x;
       const dy = curr.y - prev.y;
-      view.current.x -= dx / view.current.scale;
-      view.current.y -= dy / view.current.scale;
+      view.current.x = view.current.x.sub(dx / view.current.scale);
+      view.current.y = view.current.y.sub(dy / view.current.scale);
 
       enforceLimits(); // Apply constraints after pan
     } else if (activePointers.current.size === 2) {
@@ -560,16 +572,16 @@ export default function MandelbrotExplorer() {
 
           const prevMx = prevCenter.x - rect.left - rect.width / 2;
           const prevMy = prevCenter.y - rect.top - rect.height / 2;
-          const focalWorldX = view.current.x + prevMx / view.current.scale;
-          const focalWorldY = view.current.y + prevMy / view.current.scale;
+          const focalWorldX = view.current.x.add(prevMx / view.current.scale);
+          const focalWorldY = view.current.y.add(prevMy / view.current.scale);
 
           view.current.scale *= zoomMultiplier;
           enforceLimits(); // Apply constraints after pinch zoom
 
           const currMx = currCenter.x - rect.left - rect.width / 2;
           const currMy = currCenter.y - rect.top - rect.height / 2;
-          view.current.x = focalWorldX - currMx / view.current.scale;
-          view.current.y = focalWorldY - currMy / view.current.scale;
+          view.current.x = focalWorldX.sub(currMx / view.current.scale);
+          view.current.y = focalWorldY.sub(currMy / view.current.scale);
           enforceLimits(); // Apply constraints after pinch zoom
         }
       }

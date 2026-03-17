@@ -9,6 +9,10 @@ const config = {
     DEFAULT_PALETTE: "gold",
   },
 
+  perturbation: {
+    NUM_DECIMALS: 30,
+  },
+
   preview: {
     ENABLED: false,
     START_DELAY_MS: 1000,
@@ -28,7 +32,7 @@ const config = {
 
   limits: {
     MIN_SCALE: 80, // Prevent zooming too far out
-    MAX_SCALE: 1e14, // Prevent zooming past emulated double limits
+    MAX_SCALE: 1e95, // Prevent zooming past emulated double limits
     BOUNDS_MIN_X: -10.0, // Leftmost world coordinate
     BOUNDS_MAX_X: 10.0, // Rightmost world coordinate
     BOUNDS_MIN_Y: -10.0, // Topmost world coordinate
