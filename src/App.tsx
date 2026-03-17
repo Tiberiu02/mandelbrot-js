@@ -69,6 +69,7 @@ export default function MandelbrotExplorer() {
   const rendererRef = useRef<MandelbrotRenderer | null>(null);
   const isRenderingRef = useRef<boolean>(false);
   const isInteractingRef = useRef<boolean>(false);
+  const lastZoomTimeRef = useRef<number>(0);
 
   // --- DYNAMIC FPS SCALING ---
   const tilesPerFrameRef = useRef<number>(config.tile.INITIAL_TILES_PER_FRAME);
@@ -100,7 +101,7 @@ export default function MandelbrotExplorer() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowInstructions(false);
-    }, 10000);
+    }, config.interaction.INSTRUCTIONS_HIDE_MS);
     return () => clearTimeout(timer);
   }, []);
 
@@ -383,13 +384,13 @@ export default function MandelbrotExplorer() {
             0.2 * deltaTime + 0.8 * emaDurationRef.current;
           const currentFps = 1000 / emaDurationRef.current;
 
-          if (currentFps < 6) {
+          if (currentFps < 10) {
             tilesPerFrameRef.current = Math.max(
               1,
               Math.floor(tilesPerFrameRef.current / 1.5),
             );
             emaDurationRef.current /= 1.5;
-          } else if (currentFps > 12) {
+          } else if (currentFps > 20) {
             tilesPerFrameRef.current = Math.min(
               config.tile.MAX_TILES_PER_FRAME,
               Math.floor(tilesPerFrameRef.current * 1.5 + 1),
@@ -483,7 +484,29 @@ export default function MandelbrotExplorer() {
     null,
   );
 
+  const clampZoomMultiplier = (multiplier: number): number => {
+    const now = performance.now();
+    const elapsed = Math.min((now - lastZoomTimeRef.current) / 1000, 1);
+    lastZoomTimeRef.current = now;
+    const maxFactor = Math.pow(config.limits.MAX_ZOOM_FACTOR_PER_SEC, elapsed);
+    return Math.min(maxFactor, multiplier);
+  };
+
+  const adjustTilesForZoom = (prevScale: number, newScale: number) => {
+    if (newScale <= prevScale) return;
+    const prevLevel = Math.floor(Math.log2(prevScale / config.tile.TILE_SIZE));
+    const newLevel = Math.floor(Math.log2(newScale / config.tile.TILE_SIZE));
+    if (newLevel <= prevLevel) return;
+    const ratio = iterationsAtLevel(prevLevel) / iterationsAtLevel(newLevel);
+    tilesPerFrameRef.current = Math.max(
+      1,
+      Math.floor(tilesPerFrameRef.current * ratio),
+    );
+  };
+
   const onWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+
     const zoomMultiplier = Math.pow(0.99, e.deltaY * 0.1);
 
     if (
@@ -501,7 +524,9 @@ export default function MandelbrotExplorer() {
     const fx = view.current.x + mx / view.current.scale;
     const fy = view.current.y + my / view.current.scale;
 
-    view.current.scale *= zoomMultiplier;
+    const prevScale = view.current.scale;
+    view.current.scale *= clampZoomMultiplier(zoomMultiplier);
+    adjustTilesForZoom(prevScale, view.current.scale);
     view.current.x = fx - mx / view.current.scale;
     view.current.y = fy - my / view.current.scale;
 
@@ -510,7 +535,7 @@ export default function MandelbrotExplorer() {
       clearTimeout(interactionTimeoutRef.current);
     interactionTimeoutRef.current = setTimeout(() => {
       isInteractingRef.current = false;
-    }, 150);
+    }, config.interaction.WHEEL_IDLE_MS);
     enforceLimits(); // Apply constraints after zoom
   };
 
@@ -555,7 +580,7 @@ export default function MandelbrotExplorer() {
         };
 
         if (prevDist > 0) {
-          const zoomMultiplier = currDist / prevDist;
+          const zoomMultiplier = clampZoomMultiplier(currDist / prevDist);
           const rect = containerRef.current!.getBoundingClientRect();
 
           const prevMx = prevCenter.x - rect.left - rect.width / 2;
@@ -563,7 +588,9 @@ export default function MandelbrotExplorer() {
           const focalWorldX = view.current.x + prevMx / view.current.scale;
           const focalWorldY = view.current.y + prevMy / view.current.scale;
 
+          const prevScale = view.current.scale;
           view.current.scale *= zoomMultiplier;
+          adjustTilesForZoom(prevScale, view.current.scale);
           enforceLimits(); // Apply constraints after pinch zoom
 
           const currMx = currCenter.x - rect.left - rect.width / 2;
@@ -585,7 +612,7 @@ export default function MandelbrotExplorer() {
         clearTimeout(interactionTimeoutRef.current);
       interactionTimeoutRef.current = setTimeout(() => {
         isInteractingRef.current = false;
-      }, 150);
+      }, config.interaction.POINTER_IDLE_MS);
     }
     containerRef.current?.releasePointerCapture(e.pointerId);
   };

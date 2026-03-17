@@ -26,9 +26,16 @@ const config = {
     MAX_TILES_PER_FRAME: 256,
   },
 
+  interaction: {
+    INSTRUCTIONS_HIDE_MS: 10000, // How long to show the drag/scroll hint
+    WHEEL_IDLE_MS: 300, // Delay after scroll before rendering resumes
+    POINTER_IDLE_MS: 150, // Delay after pointer-up before rendering resumes
+  },
+
   limits: {
     MIN_SCALE: 80, // Prevent zooming too far out
     MAX_SCALE: 1e14, // Prevent zooming past emulated double limits
+    MAX_ZOOM_FACTOR_PER_SEC: 16, // Maximum zoom speed (2x per second, logarithmic)
     BOUNDS_MIN_X: -10.0, // Leftmost world coordinate
     BOUNDS_MAX_X: 10.0, // Rightmost world coordinate
     BOUNDS_MIN_Y: -10.0, // Topmost world coordinate
