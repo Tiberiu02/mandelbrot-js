@@ -76,6 +76,7 @@ export default function MandelbrotExplorer() {
   const lastFrameTimeRef = useRef<number>(0);
   const wasLastIntensiveRef = useRef<boolean>(false);
   const emaDurationRef = useRef<number>(1000 / 60);
+  const emaDuration2Ref = useRef<number>((1000 / 60) ** 2);
 
   const [showInstructions, setShowInstructions] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -382,20 +383,28 @@ export default function MandelbrotExplorer() {
         if (wasLastIntensiveRef.current && isCurrentFrameIntensive) {
           emaDurationRef.current =
             0.2 * deltaTime + 0.8 * emaDurationRef.current;
-          const currentFps = 1000 / emaDurationRef.current;
+          emaDuration2Ref.current =
+            0.2 * deltaTime * deltaTime + 0.8 * emaDuration2Ref.current;
 
-          if (currentFps < 10) {
+          const variance =
+            emaDuration2Ref.current - emaDurationRef.current ** 2;
+          const sd = Math.sqrt(Math.max(0, variance));
+          const refFps = 1000 / (emaDurationRef.current + 2 * sd);
+
+          if (refFps < 15) {
             tilesPerFrameRef.current = Math.max(
               1,
-              Math.floor(tilesPerFrameRef.current / 1.5),
+              Math.floor(tilesPerFrameRef.current / 1.25),
             );
-            emaDurationRef.current /= 1.5;
-          } else if (currentFps > 20) {
+            emaDurationRef.current /= 1.25;
+            emaDuration2Ref.current /= 1.25 * 1.25;
+          } else if (refFps > 20) {
             tilesPerFrameRef.current = Math.min(
               config.tile.MAX_TILES_PER_FRAME,
-              Math.floor(tilesPerFrameRef.current * 1.5 + 1),
+              Math.floor(tilesPerFrameRef.current * 1.25 + 1),
             );
-            emaDurationRef.current *= 1.5;
+            emaDurationRef.current *= 1.25;
+            emaDuration2Ref.current *= 1.25 * 1.25;
           }
         }
       }
