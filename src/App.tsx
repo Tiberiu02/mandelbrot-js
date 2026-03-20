@@ -793,7 +793,7 @@ export default function MandelbrotExplorer() {
                     const params = new URLSearchParams({
                       x: x.toFixed(decimals),
                       y: y.toFixed(decimals),
-                      z: scale.toExponential(1),
+                      z: scale.toExponential(1).replace(/e\+?/, "e"),
                       p: palette,
                       i: String(itersPerLevel),
                     });
