@@ -638,12 +638,14 @@ export default function MandelbrotExplorer() {
         className={`w-full h-full overflow-hidden relative bg-black touch-none select-none overscroll-none ${activePointers.current.size > 0 ? "cursor-grabbing" : "cursor-grab"}`}
       >
         <canvas ref={mainCanvasRef} className="w-full h-full block" />
-        <div
-          ref={debugTextRef}
-          className={`absolute top-2.5 left-2.5 text-white bg-black/60 p-2.5 rounded-lg font-mono pointer-events-none text-[10px] ${config.DEBUG_MODE ? "block" : "hidden"}`}
-        >
-          Initializing Explorer...
-        </div>
+        {config.DEBUG_MODE && (
+          <div
+            ref={debugTextRef}
+            className={`absolute top-2.5 left-2.5 text-white bg-black/60 p-2.5 rounded-lg font-mono pointer-events-none text-[10px]`}
+          >
+            Initializing Explorer...
+          </div>
+        )}
 
         <div
           className={`absolute top-5 left-1/2 -translate-x-1/2 text-white bg-black/70 px-5 py-3 rounded-lg font-sans font-bold tracking-[1px] pointer-events-none text-sm transition-opacity duration-500 whitespace-nowrap z-10 ${showInstructions ? "opacity-100" : "opacity-0"}`}
