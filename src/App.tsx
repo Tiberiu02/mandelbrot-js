@@ -29,9 +29,14 @@ function isMobile(): boolean {
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
+function maxItersForShader(): number {
+  return config.mandelbrot.BASE_ITERS +
+    config.mandelbrot.MAX_LEVEL * config.mandelbrot.ITERS_PER_LEVEL_INIT;
+}
+
 function iterationsAtLevel(level: number): number {
   return Math.min(
-    config.mandelbrot.MAX_ITERS,
+    maxItersForShader(),
     Math.floor(
       config.mandelbrot.BASE_ITERS +
         Math.max(0, level) * config.mandelbrot.ITERS_PER_LEVEL_INIT,
@@ -288,16 +293,19 @@ export default function MandelbrotExplorer() {
             isCurrentFrameIntensive = true;
           }
 
+          const currentMaxIters = maxItersForShader();
           if (
             !rendererRef.current ||
             rendererRef.current.physicalSize !== physicalSize ||
-            rendererRef.current.palette !== palette
+            rendererRef.current.palette !== palette ||
+            rendererRef.current.maxIters !== currentMaxIters
           ) {
             rendererRef.current?.delete();
             rendererRef.current = new MandelbrotRenderer(
               physicalSize,
               config.tile.MAX_TILES_PER_FRAME,
               palettes[palette],
+              currentMaxIters,
             );
           }
 

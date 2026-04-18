@@ -1,7 +1,5 @@
 // --- WEBGL RENDERER LOGIC ---
 
-import config from "./config";
-
 export const palettes: Record<string, string> = {
   gold: `
     vec3 palette(int iter, float dotZ) {
@@ -83,13 +81,20 @@ export class MandelbrotRenderer {
   public physicalSize: number;
   public tilesPerRow: number;
   public palette: string;
+  public maxIters: number;
 
   private instanceBuffer!: WebGLBuffer;
   private instanceData: Float32Array;
 
-  constructor(physicalSize: number, maxTilesPerFrame: number, palette: string) {
+  constructor(
+    physicalSize: number,
+    maxTilesPerFrame: number,
+    palette: string,
+    maxIters: number,
+  ) {
     this.palette = palette;
     this.physicalSize = physicalSize;
+    this.maxIters = maxIters;
     this.tilesPerRow = Math.ceil(Math.sqrt(maxTilesPerFrame));
     const totalSize = this.tilesPerRow * physicalSize;
 
@@ -223,7 +228,9 @@ export class MandelbrotRenderer {
             vec2 zx = vec2(0.0);
             vec2 zy = vec2(0.0);
             
-            for(int i = 0; i < ${config.mandelbrot.MAX_ITERS}; i++) {
+            // Max Iters must be a compile-time constant, but if it's too large,
+            // mobile GPUs struggle to compile the shader.
+            for(int i = 0; i < ${this.maxIters}; i++) {
                 if (i >= v_maxIterations) break;
                 
                 vec2 x2 = df_mul(zx, zx);
@@ -246,7 +253,7 @@ export class MandelbrotRenderer {
             float cx_f = cx.x;
             float cy_f = cy.x;
             
-            for(int i = 0; i < ${config.mandelbrot.MAX_ITERS}; i++) {
+            for(int i = 0; i < ${this.maxIters}; i++) {
                 if (i >= v_maxIterations) break;
                 
                 float x2 = zx * zx;

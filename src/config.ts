@@ -5,7 +5,7 @@ const config = {
     BASE_ITERS: 256,
     ITERS_PER_LEVEL_INIT: 256,
     ITERS_PER_LEVEL_INIT_MOBILE: 64,
-    MAX_ITERS: 2000000,
+    MAX_LEVEL: Math.ceil(Math.log2(1e14)),
     DEFAULT_PALETTE: "gold",
   },
 
